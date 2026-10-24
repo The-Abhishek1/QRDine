@@ -1,0 +1,7 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- a QR-code style mark: three finder squares and a dot grid in turmeric -->
+    <path android:fillColor="#FFFFFF" android:pathData="M30,30h20v20h-20z M58,30h20v20h-20z M30,58h20v20h-20z" />
+    <path android:fillColor="#0B7A6B" android:pathData="M35,35h10v10h-10z M63,35h10v10h-10z M35,63h10v10h-10z" />
+    <path android:fillColor="#F2B632" android:pathData="M58,58h8v8h-8z M70,58h8v8h-8z M58,70h8v8h-8z M70,70h8v8h-8z" />
+</vector>
