@@ -47,7 +47,7 @@ fun AddonGroupsScreen(vm: MenuViewModel, onBack: () -> Unit) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(g.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            (if (g.minSelect > 0) "Required, " else "Optional, ") + (if (g.maxSelect == 1) "pick one" else "pick up to ${g.maxSelect}") + " · used on $usedBy dish(es)",
+                            (if (g.minSelect > 0) "Required: pick at least ${g.minSelect}, " else "Optional, ") + "pick up to ${g.maxSelect} · used on $usedBy dish(es)",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         addons.forEach { a ->

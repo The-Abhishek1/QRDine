@@ -1,5 +1,5 @@
 begin;
-select plan(41);
+select plan(48);
 
 insert into auth.users (id, email) values
   ('a0000000-0000-0000-0000-0000000000a1', 'owner@test.dev'), ('a0000000-0000-0000-0000-0000000000a2', 'waiter@test.dev'),
@@ -146,6 +146,39 @@ reset role;
 select is(public.menu_insights('aaaaaaaa-0000-0000-0000-000000000001') ? 'bestsellers', true, 'suggestions are computed');
 update public.owners set active = false where user_id = 'a0000000-0000-0000-0000-0000000000a2';
 select is(public.custom_access_token_hook('{"user_id":"a0000000-0000-0000-0000-0000000000a2","claims":{}}'::jsonb) #>> '{claims,hotel_status}', 'disabled', 'a disabled staff login is blocked');
+
+-- 42-48 optional add-ons and Buy N Get M offers
+insert into public.dining_tables (id, restaurant_id, label)
+values ('e0000000-0000-0000-0000-0000000000a5', 'aaaaaaaa-0000-0000-0000-000000000001', 'T5');
+insert into public.sessions (id, restaurant_id, table_id)
+values ('51000000-0000-0000-0000-0000000000a5', 'aaaaaaaa-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-0000000000a5');
+update public.dining_tables set status = 'active', active_session_id = '51000000-0000-0000-0000-0000000000a5'
+where id = 'e0000000-0000-0000-0000-0000000000a5';
+insert into public.dishes (id, restaurant_id, category_id, name, base_price)
+values ('d0000000-0000-0000-0000-0000000000a5', 'aaaaaaaa-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-0000000000a1', 'Naan', 10000);
+insert into public.offers (restaurant_id, name, buy_qty, get_qty, buy_dish_id, reward_dish_id)
+values ('aaaaaaaa-0000-0000-0000-000000000001', 'Buy 2 Rice, get 1 free', 2, 1,
+        'd0000000-0000-0000-0000-0000000000a4', 'd0000000-0000-0000-0000-0000000000a4');
+select is((public.place_order('51000000-0000-0000-0000-0000000000a5', 'ck-bogo-same', 'dine_in', null,
+  '[{"dish_id":"d0000000-0000-0000-0000-0000000000a4","qty":6}]'::jsonb) ->> 'total')::int,
+  20000, 'same-item Buy 2 Get 1 repeats for each bundle');
+select is((select sum(qty)::int from public.order_items where order_id = (select id from public.orders where client_key = 'ck-bogo-same') and offer_free), 2, 'two free same-item units are stored separately');
+select is((select min_select from public.addon_groups where id = 'a9000000-0000-0000-0000-0000000000a1'), 0, 'add-on groups are optional after migration');
+update public.offers set active = false where name = 'Buy 2 Rice, get 1 free';
+insert into public.offers (restaurant_id, name, buy_qty, get_qty, buy_dish_id, reward_dish_id)
+values ('aaaaaaaa-0000-0000-0000-000000000001', 'Buy 2 Naan, get 1 Paneer free', 2, 1,
+        'd0000000-0000-0000-0000-0000000000a5', 'd0000000-0000-0000-0000-0000000000a1');
+select is((public.place_order('51000000-0000-0000-0000-0000000000a5', 'ck-bogo-diff', 'dine_in', null,
+  '[{"dish_id":"d0000000-0000-0000-0000-0000000000a5","qty":2},{"dish_id":"d0000000-0000-0000-0000-0000000000a1","qty":1,"variant_id":"f1000000-0000-0000-0000-0000000000a1"},{"dish_id":"d0000000-0000-0000-0000-0000000000a1","qty":1,"variant_id":"f1000000-0000-0000-0000-0000000000a2"}]'::jsonb) ->> 'total')::int,
+  40000, 'different-item offer discounts the cheapest reward variant');
+select is((select variant_snapshot from public.order_items where order_id = (select id from public.orders where client_key = 'ck-bogo-diff') and offer_free), 'Half', 'the cheapest eligible reward variant is the free one');
+insert into public.offers (restaurant_id, name, buy_qty, get_qty, buy_dish_id, reward_dish_id)
+values ('aaaaaaaa-0000-0000-0000-000000000001', 'Buy Rice, get 2 Paneer free', 1, 2,
+        'd0000000-0000-0000-0000-0000000000a4', 'd0000000-0000-0000-0000-0000000000a1');
+select is((public.place_order('51000000-0000-0000-0000-0000000000a5', 'ck-bogo-no-stack', 'dine_in', null,
+  '[{"dish_id":"d0000000-0000-0000-0000-0000000000a5","qty":2},{"dish_id":"d0000000-0000-0000-0000-0000000000a4","qty":1},{"dish_id":"d0000000-0000-0000-0000-0000000000a1","qty":1,"variant_id":"f1000000-0000-0000-0000-0000000000a1"}]'::jsonb) ->> 'total')::int,
+  25000, 'overlapping offers cannot discount the same reward unit twice');
+select is((select sum(qty)::int from public.order_items where order_id = (select id from public.orders where client_key = 'ck-bogo-no-stack') and offer_free), 1, 'the overlapping order contains only one free unit');
 
 select * from finish();
 rollback;

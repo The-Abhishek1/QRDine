@@ -54,6 +54,23 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
           <span><VegMark veg /> {t("vegOnly")}</span>
         </label>
       </div>
+      {!!menu.offers?.length && (
+        <section className="offers" aria-label="Offers">
+          <h2>Offers</h2>
+          {menu.offers.map((offer) => {
+            const item = menu.dishes.find((d) => d.id === offer.buy_dish_id);
+            const reward = menu.dishes.find((d) => d.id === offer.reward_dish_id);
+            if (!item || !reward) return null;
+            return (
+              <div className="offer-card" key={offer.id}>
+                <strong>{offer.name}</strong>
+                <span>{t("buyGetOffer", { buy: offer.buy_qty, item: pick(item.name, item.name_i18n), get: offer.get_qty, reward: pick(reward.name, reward.name_i18n) })}</span>
+                <small>{t("addRewardToQualify")}</small>
+              </div>
+            );
+          })}
+        </section>
+      )}
       {groups.length > 1 && (
         <nav className="cats" aria-label="Menu sections">
           {groups.map(({ c }) => (

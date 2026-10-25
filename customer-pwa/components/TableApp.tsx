@@ -4,6 +4,7 @@ import { api, ApiError } from "@/lib/api";
 import { rupees } from "@/lib/money";
 import { newKey } from "@/lib/uuid";
 import { type CartLine, isSimple, lineKey, parseCart, unitPrice } from "@/lib/cart";
+import { freeOfferQuantities } from "@/lib/offers";
 import { I18nContext, LANGS, makeI18n } from "@/lib/i18n";
 import { sessionIdFromToken, subscribeSession } from "@/lib/realtime";
 import type { ActiveState, Dish, EndedState, JoinResult, Menu } from "@/lib/types";
@@ -33,6 +34,15 @@ const ORDER_ERRORS: Record<string, string> = {
   subscription_inactive: "This restaurant isn't taking orders through the app right now. Please ask the staff.",
   order_too_large: "That order is too large. Split it into two orders or ask the waiter.",
   network: "No connection. Your cart is saved, so try again in a moment.",
+};
+
+const REVIEW_ERRORS: Record<string, string> = {
+  invalid_session: "This review link has expired. Please ask the staff for help.",
+  not_paid: "Feedback is available after your bill has been paid.",
+  empty_review: "Choose a rating or write a comment before sending.",
+  rate_limited: "Please wait a moment before sending feedback again.",
+  network: "No connection. Check your internet and try again.",
+  server_error: "The restaurant could not save your feedback. Please try again later.",
 };
 
 export default function TableApp({ token }: { token: string }) {
@@ -167,10 +177,14 @@ export default function TableApp({ token }: { token: string }) {
     const variant = d.variants.find((v) => v.id === line.variantId);
     const addons = d.addon_groups.flatMap((g) => g.addons).filter((a) => line.addonIds.includes(a.id));
     const label = pick(d.name, d.name_i18n) + (variant ? ` (${variant.name})` : "") + (addons.length ? ` + ${addons.map((a) => a.name).join(", ")}` : "");
-    return [{ line, dish: d, unit: unitPrice(d, line.variantId, line.addonIds), label, problem }];
+    return [{ line, dish: d, unit: unitPrice(d, line.variantId, line.addonIds), label, problem, freeQty: 0 }];
   }), [cart, dishById, catById, t, pick]);
+  const rowsWithOffers = useMemo(() => {
+    const free = freeOfferQuantities(rows, menu?.offers ?? []);
+    return rows.map((row) => ({ ...row, freeQty: free.get(row.line.key) ?? 0 }));
+  }, [rows, menu?.offers]);
   const count = rows.reduce((n, r) => n + r.line.qty, 0);
-  const total = rows.reduce((n, r) => n + r.unit * r.line.qty, 0);
+  const total = rowsWithOffers.reduce((n, r) => n + r.unit * (r.line.qty - r.freeQty), 0);
 
   const suggestions = useMemo(() => {
     if (!menu) return [] as Dish[];
@@ -247,7 +261,16 @@ export default function TableApp({ token }: { token: string }) {
         paid={info?.paid ?? null}
         canReview={!!guest.current}
         reviewed={info?.reviewed ?? false}
-        onSubmit={async (r) => { if (guest.current) await api.review(guest.current, r); }}
+        onSubmit={async (r) => {
+          if (!guest.current) throw new Error(REVIEW_ERRORS.invalid_session);
+          try {
+            await api.review(guest.current, r);
+          } catch (e) {
+            if (e instanceof ApiError && e.code === "already_reviewed") return;
+            const code = e instanceof ApiError ? e.code : "network";
+            throw new Error(REVIEW_ERRORS[code] ?? `Could not send feedback (${code}). Please try again.`);
+          }
+        }}
       />,
     );
   }
@@ -319,7 +342,7 @@ export default function TableApp({ token }: { token: string }) {
 
       {cartOpen && (
         <CartSheet
-          rows={rows} suggestions={suggestions} orderType={orderType} setOrderType={setOrderType} note={note} setNote={setNote}
+          rows={rowsWithOffers} suggestions={suggestions} orderType={orderType} setOrderType={setOrderType} note={note} setNote={setNote}
           error={cartError} placing={placing} onInc={incKey} onDec={decKey} onSuggest={suggest} onPlace={placeOrder} onClose={() => setCartOpen(false)}
         />
       )}

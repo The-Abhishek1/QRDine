@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -97,12 +98,27 @@ private fun Home(r: Restaurant, status: HotelStatus?, role: String, onOpen: (Str
         "expired" -> "Subscription ended. Guests cannot order."
         else -> ""
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (r.logoUrl != null) AsyncImage(r.logoUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
-            Column {
-                Text(r.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(sub, style = MaterialTheme.typography.bodySmall)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("RESTAURANT SETTINGS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (r.logoUrl != null) {
+                    AsyncImage(r.logoUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)))
+                } else {
+                    Surface(
+                        Modifier.size(64.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Box(Modifier.fillMaxSize(), Alignment.Center) {
+                            Text(r.name.take(1).uppercase(), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(r.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(sub.ifBlank { "Manage how your restaurant runs." }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         if (status != null && (status.state == "grace" || status.state == "expired" || (status.daysLeft ?: 99) <= 7)) {
@@ -114,25 +130,44 @@ private fun Home(r: Restaurant, status: HotelStatus?, role: String, onOpen: (Str
                 }
             }
         }
-        buildList {
+        val sections = buildList<Pair<String, List<Triple<String, String, String>>>> {
             if (role == "owner") {
-                add(Triple("profile", "Restaurant details", "Name, photo, address, phone, FSSAI"))
-                add(Triple("billing", "Billing, tax and UPI", "GST, service charge, UPI ID for guests"))
-                add(Triple("ordering", "Ordering mode", if (r.mode == "open") "Tables open automatically on scan" else "You open each table"))
-                add(Triple("offers", "Offers and announcement", "Today's message to guests, coupon codes"))
-                add(Triple("languages", "Guest languages", if (r.languages.isEmpty()) "English only" else "English + " + r.languages.joinToString { LANG_NAMES[it] ?: it }))
-                add(Triple("staff", "Staff logins", "Waiter and kitchen accounts"))
-                add(Triple("pin", "Manager PIN", "Needed to give a discount on a bill"))
+                add(
+                    "RESTAURANT" to listOf(
+                        Triple("profile", "Restaurant details", "Name, photo, address, phone, FSSAI"),
+                        Triple("billing", "Billing, tax and UPI", "GST, service charge, UPI ID for guests"),
+                        Triple("ordering", "Ordering mode", if (r.mode == "open") "Tables open automatically on scan" else "You open each table"),
+                        Triple("offers", "Offers and announcement", "Today's message to guests, coupon codes"),
+                        Triple("languages", "Guest languages", if (r.languages.isEmpty()) "English only" else "English + " + r.languages.joinToString { LANG_NAMES[it] ?: it }),
+                        Triple("staff", "Staff logins", "Waiter and kitchen accounts"),
+                        Triple("pin", "Manager PIN", "Needed to give a discount on a bill"),
+                    ),
+                )
             }
-            add(Triple("printer", "Receipt printer", "Bluetooth thermal printer, kitchen tickets"))
-            add(Triple("device", "This device", "Kitchen display mode"))
-            add(Triple("alerts", "Alert health", "Check why alerts might be silent, send a test"))
-            add(Triple("account", "Account", "Email, password, sign out"))
-        }.forEach { (key, title, subtitle) ->
-            Card(Modifier.fillMaxWidth().clickable { onOpen(key) }) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall)
+            add(
+                "SERVICE & DEVICES" to listOf(
+                    Triple("printer", "Receipt printer", "Bluetooth thermal printer, kitchen tickets"),
+                    Triple("device", "This device", "Kitchen display mode"),
+                    Triple("alerts", "Alert health", "Check why alerts might be silent, send a test"),
+                ),
+            )
+            add("ACCOUNT" to listOf(Triple("account", "Account", "Email, password, sign out")))
+        }
+        sections.forEach { (heading, items) ->
+            Text(heading, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            items.forEach { (key, title, subtitle) ->
+                GlassCard(Modifier.fillMaxWidth().clickable { onOpen(key) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Open $title",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
         }

@@ -101,6 +101,7 @@ fun InsightsScreen(bottomBar: @Composable () -> Unit, onHistory: () -> Unit = {}
 
     Scaffold(bottomBar = bottomBar, topBar = { TopAppBar(title = { Text("Insights", fontWeight = FontWeight.SemiBold) }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            ScreenIntro("BUSINESS OVERVIEW", "Performance at a glance", "Track sales, popular dishes, and guest feedback.")
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Range.entries.forEach { r ->
                     FilterChip(
@@ -114,12 +115,16 @@ fun InsightsScreen(bottomBar: @Composable () -> Unit, onHistory: () -> Unit = {}
             val d = data
             if (d != null) {
                 val st = d.stats
-                Button({
-                    scope.launch {
-                        val file = withContext(Dispatchers.Default) { SalesReportPdf.build(context, d.restaurantName, d.start, d.end, st, d.invoices.size) }
-                        QrSheet.share(context, file, "Share the sales summary")
-                    }
-                }, Modifier.fillMaxWidth().height(50.dp)) { Text("Download sales summary (PDF)") }
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("SALES REPORT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("${d.start.dayOfMonth} ${d.start.month.name.lowercase().replaceFirstChar(Char::uppercase)} – ${d.end.dayOfMonth} ${d.end.month.name.lowercase().replaceFirstChar(Char::uppercase)}")
+                    Button({
+                        scope.launch {
+                            val file = withContext(Dispatchers.Default) { SalesReportPdf.build(context, d.restaurantName, d.start, d.end, st, d.invoices.size) }
+                            QrSheet.share(context, file, "Share the sales summary")
+                        }
+                    }, Modifier.fillMaxWidth().height(50.dp)) { Text("Download sales summary · PDF") }
+                }
                 if (st.bills == 0) Text("No paid bills in this period yet. Charts appear after the first bill is marked paid.", style = MaterialTheme.typography.bodyMedium)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -283,21 +288,17 @@ private fun stars(n: Int?): String = if (n == null) "–" else "★".repeat(n) +
 
 @Composable
 private fun Kpi(label: String, value: String, modifier: Modifier) {
-    Card(modifier) {
-        Column(Modifier.padding(14.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        }
+    GlassCard(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            content()
-        }
+    GlassCard(Modifier.fillMaxWidth()) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        content()
     }
 }
 

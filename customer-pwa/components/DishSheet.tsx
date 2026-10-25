@@ -13,7 +13,12 @@ export default function DishSheet({ dish, onAdd, onClose }: { dish: Dish; onAdd:
   const [note, setNote] = useState("");
 
   const addonIds = Object.values(sel).flat();
-  const valid = dish.addon_groups.every((g) => { const n = (sel[g.id] ?? []).length; return n >= g.min_select && n <= g.max_select; });
+  const invalidGroup = dish.addon_groups.find((g) => {
+    const n = (sel[g.id] ?? []).length;
+    return n < g.min_select || n > g.max_select;
+  });
+  const impossibleGroup = dish.addon_groups.find((g) => g.min_select > g.addons.filter((a) => a.is_available).length);
+  const valid = !invalidGroup;
   const price = unitPrice(dish, variantId, addonIds) * qty;
 
   function toggle(gid: string, aid: string, max: number) {
@@ -45,7 +50,7 @@ export default function DishSheet({ dish, onAdd, onClose }: { dish: Dish; onAdd:
 
         {dish.addon_groups.map((g) => (
           <fieldset key={g.id} className="opt-group">
-            <legend>{g.name} <small>· {g.min_select > 0 ? `${t("required")}, ` : ""}{g.max_select === 1 ? t("chooseOne") : t("chooseUpTo", { n: g.max_select })}</small></legend>
+            <legend>{g.name} <small>· {g.min_select === 0 ? `${t("optional")}, ` : `${t("chooseAtLeast", { n: g.min_select })}, `}{g.max_select === 1 ? t("chooseOne") : t("chooseUpTo", { n: g.max_select })}</small></legend>
             {g.addons.map((a) => (
               <label key={a.id} className={`opt ${a.is_available ? "" : "opt-off"}`}>
                 <input type={g.max_select === 1 ? "radio" : "checkbox"} name={`g-${g.id}`} disabled={!a.is_available}
@@ -55,6 +60,11 @@ export default function DishSheet({ dish, onAdd, onClose }: { dish: Dish; onAdd:
             ))}
           </fieldset>
         ))}
+        {impossibleGroup ? (
+          <p className="warn" role="status">{t("notEnoughAvailableOptions", { name: impossibleGroup.name })}</p>
+        ) : invalidGroup && invalidGroup.min_select > (sel[invalidGroup.id] ?? []).length ? (
+          <p className="warn" role="status">{t("selectAtLeastOptions", { n: invalidGroup.min_select })}</p>
+        ) : null}
 
         <label className="note">
           <span>{t("instructions")}</span>

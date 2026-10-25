@@ -15,6 +15,11 @@ export type Dish = {
 export type Menu = {
   categories: Category[]; dishes: Dish[]; announcement: string | null;
   languages: string[]; bestsellers: string[]; pairs: Record<string, string[]>;
+  offers: Offer[];
+};
+export type Offer = {
+  id: string; name: string; buy_qty: number; get_qty: number;
+  buy_dish_id: string; reward_dish_id: string; created_at: string;
 };
 
 export type Restaurant = { name: string; upi_id?: string | null; logo_url?: string | null };

@@ -50,6 +50,8 @@ Five tabs: Orders | Tables | Menu | Insights | Settings.
 - Settings: restaurant name, photo, address, phone, FSSAI; GST mode/rate/GSTIN, service charge, UPI ID; ordering mode;
   announcement and coupons; Alert health (checklist + test alert); email, change password, sign out.
 - Menu: rename or delete a category (a category must be empty to delete).
+- Menu: Extras and Offers are available directly from the menu screen. Existing extras are made optional; groups can still be configured
+  with a minimum if a restaurant specifically needs a required choice. Create Buy N Get M offers for the same dish or a different free dish.
 - Alerts also ring from the alert service itself (alarm tone + vibration), so they no longer depend only on notification settings.
 
 ## M5: platform admin area, approval flow, sales downloads, polish
@@ -63,4 +65,6 @@ Same app, three kinds of sign-in:
 Hotel owners can now download a **sales summary PDF** for today, 7 days, 30 days, this month or any custom date range
 (Insights tab), plus the bills CSV.
 Polish: brand theme (light and dark), splash screen, app icon, show/hide password, consistent screens.
+The shared UI theme uses translucent surfaces and a soft, adaptive gradient backdrop for a glass-style finish across auth,
+owner, kitchen and platform-admin screens.
 Create your platform admin login first: see backend/README.md (M5).

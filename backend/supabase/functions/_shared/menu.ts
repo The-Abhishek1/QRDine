@@ -13,7 +13,7 @@ function openNow(from: string | null, to: string | null): boolean {
 }
 
 export async function loadMenu(db: SupabaseClient, restaurantId: string) {
-  const [cats, dishes, ann, rest, vars, groups, addons, links, ins] = await Promise.all([
+  const [cats, dishes, ann, rest, vars, groups, addons, links, ins, offers] = await Promise.all([
     db.from("categories").select("id,name,kind,sort,name_i18n,avail_from,avail_to")
       .eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort").order("name"),
     db.from("dishes").select("id,category_id,name,description,image_url,base_price,is_veg,is_available,sort,name_i18n,description_i18n,stock_qty")
@@ -25,8 +25,11 @@ export async function loadMenu(db: SupabaseClient, restaurantId: string) {
     db.from("addons").select("id,group_id,name,price,is_available").eq("restaurant_id", restaurantId),
     db.from("dish_addon_groups").select("dish_id,group_id").eq("restaurant_id", restaurantId),
     db.rpc("menu_insights", { p_rid: restaurantId }),
+    db.from("offers").select("id,name,buy_qty,get_qty,buy_dish_id,reward_dish_id,created_at")
+      .eq("restaurant_id", restaurantId).eq("active", true).order("created_at").order("id"),
   ]);
   if (cats.error || dishes.error) throw new Error("menu_load_failed");
+  if (offers.error) throw new Error("offer_load_failed");
 
   const addonsByGroup = new Map<string, unknown[]>();
   for (const a of addons.data ?? []) addonsByGroup.set(a.group_id, [...(addonsByGroup.get(a.group_id) ?? []), { id: a.id, name: a.name, price: a.price, is_available: a.is_available }]);
@@ -45,6 +48,6 @@ export async function loadMenu(db: SupabaseClient, restaurantId: string) {
   const insights = (ins.data ?? {}) as { bestsellers?: string[]; pairs?: Record<string, string[]> };
   return {
     categories, dishes: dishList, announcement: ann.data?.[0]?.text ?? null, languages: (rest.data?.languages ?? []) as string[],
-    bestsellers: insights.bestsellers ?? [], pairs: insights.pairs ?? {},
+    bestsellers: insights.bestsellers ?? [], pairs: insights.pairs ?? [], offers: offers.data ?? [],
   };
 }

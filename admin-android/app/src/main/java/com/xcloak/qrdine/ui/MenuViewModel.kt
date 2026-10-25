@@ -20,6 +20,7 @@ data class MenuUiState(
     val groups: List<AddonGroup> = emptyList(),
     val addons: List<Addon> = emptyList(),
     val links: List<DishAddonLink> = emptyList(),
+    val offers: List<Offer> = emptyList(),
     val languages: List<String> = emptyList(),
     val message: String? = null,
     val error: String? = null,
@@ -66,16 +67,40 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
         viewModelScope.launch {
             try {
                 val rest = runCatching { owner.restaurant() }.getOrNull()
+                val categories = repo.categories()
+                val dishes = repo.dishes()
+                val variants = repo.variants()
+                val groups = repo.groups()
+                val addons = repo.addons()
+                val links = repo.links()
+                val offersResult = runCatching { repo.offers() }
                 _state.update {
                     it.copy(
-                        loading = false, error = null, restaurantName = rest?.name ?: it.restaurantName, languages = rest?.languages ?: it.languages,
-                        categories = repo.categories(), dishes = repo.dishes(), variants = repo.variants(),
-                        groups = repo.groups(), addons = repo.addons(), links = repo.links(),
+                        loading = false,
+                        error = offersResult.exceptionOrNull()?.let(::offerLoadError),
+                        restaurantName = rest?.name ?: it.restaurantName,
+                        languages = rest?.languages ?: it.languages,
+                        categories = categories,
+                        dishes = dishes,
+                        variants = variants,
+                        groups = groups,
+                        addons = addons,
+                        links = links,
+                        offers = offersResult.getOrDefault(emptyList()),
                     )
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.message ?: "Could not load the menu") }
+                _state.update { it.copy(loading = false, error = "Could not load the menu. Check your connection and refresh.") }
             }
+        }
+    }
+
+    private fun offerLoadError(e: Throwable): String {
+        val message = e.message.orEmpty()
+        return if ("public.offers" in message && ("schema cache" in message || "does not exist" in message)) {
+            "Offers are unavailable until the latest backend migration is applied. Menu items are still available."
+        } else {
+            "Could not load offers. Check the backend setup and refresh."
         }
     }
 
@@ -85,7 +110,7 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
             "category_has_dishes" in m -> "Delete or move the dishes in this category first."
             "category_not_found" in m -> "That category no longer exists."
             "violates foreign key" in m -> "That is still in use. Remove it from the dishes first."
-            else -> m.take(160)
+            else -> "Could not save the menu change. Check your connection and try again."
         }
     }
 
@@ -133,7 +158,7 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
         _state.update { s -> s.copy(dishes = s.dishes.map { if (it.id == dish.id) it.copy(isAvailable = !dish.isAvailable) else it }) }
         viewModelScope.launch {
             try { repo.setAvailable(dish.id, !dish.isAvailable) }
-            catch (e: Exception) { _state.update { it.copy(error = e.message ?: "Could not update stock") }; refresh() }
+            catch (e: Exception) { _state.update { it.copy(error = friendly(e)) }; refresh() }
         }
     }
 
@@ -159,6 +184,10 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
     fun addAddon(groupId: String, name: String, pricePaise: Int) = run { repo.addAddon(groupId, name, pricePaise) }
     fun setAddonAvailable(a: Addon, available: Boolean) = run { repo.setAddonAvailable(a.id, available) }
     fun deleteAddon(a: Addon) = run { repo.deleteAddon(a.id) }
+    fun addOffer(name: String, buyQty: Int, getQty: Int, buyDishId: String, rewardDishId: String, onDone: () -> Unit = {}) =
+        run(onDone) { repo.addOffer(name, buyQty, getQty, buyDishId, rewardDishId) }
+    fun setOfferActive(offer: Offer, active: Boolean) = run { repo.setOfferActive(offer.id, active) }
+    fun deleteOffer(offer: Offer) = run { repo.deleteOffer(offer.id) }
 
     fun clearError() = _state.update { it.copy(error = null) }
     fun messageShown() = _state.update { it.copy(message = null) }

@@ -79,7 +79,7 @@ private fun CategoryDialog(initial: Category?, languages: List<String>, onDismis
         },
         confirmButton = {
             TextButton(enabled = name.isNotBlank() && timeOk, onClick = {
-                onSave(name, kind, tr.filterValues { it.isNotBlank() }.takeIf { it.isNotEmpty() }, from.ifBlank { null }, to.ifBlank { null }); onDismiss()
+                onSave(name, kind, tr.filterValues { it.isNotBlank() }.takeIf { it.isNotEmpty() }, normalizeTime(from), normalizeTime(to)); onDismiss()
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
@@ -92,6 +92,7 @@ fun MenuHost(
     vm: MenuViewModel,
     bottomBar: @Composable () -> Unit = {},
     onAddonGroups: () -> Unit = {},
+    onOffers: () -> Unit = {},
     authVm: AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
@@ -165,21 +166,33 @@ fun MenuHost(
                     Modifier.align(Alignment.Center).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("Start by adding a category", style = MaterialTheme.typography.titleMedium)
-                    Text("For example Starters, Mains, Beverages. Or import a CSV of your dishes.", style = MaterialTheme.typography.bodyMedium)
+                    ScreenIntro("BUILD YOUR CATALOG", "Start with a category", "For example Starters, Mains, or Beverages. You can also import dishes from a CSV.")
                     Button({ categoryDialog = true }) { Text("Add category") }
                     OutlinedButton({ csvPicker.launch("*/*") }) { Text("Import dishes (CSV)") }
                     s.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
                     s.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) } }
+                    item(key = "menu-tools") {
+                        GlassCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Text("MENU TOOLS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                            Text("Customize what guests can add or save.", style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onAddonGroups, Modifier.weight(1f)) { Text("Extras · ${s.groups.size}") }
+                                OutlinedButton(onOffers, Modifier.weight(1f)) { Text("Offers · ${s.offers.count { it.active }}") }
+                            }
+                        }
+                    }
                     if (reorder) item { Text("Use the arrows to change the order guests see. Tap Done when finished.", Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.bodySmall) }
                     s.categories.forEachIndexed { ci, cat ->
                         item(key = "c-${cat.id}") {
                             var catMenu by remember { mutableStateOf(false) }
-                            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 16.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(cat.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Text(cat.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                                     if (cat.availFrom != null && cat.availTo != null) Text("Served ${cat.availFrom.take(5)} to ${cat.availTo.take(5)}", style = MaterialTheme.typography.bodySmall)
                                 }
                                 if (reorder) {
@@ -198,10 +211,9 @@ fun MenuHost(
                         if (dishes.isEmpty()) item(key = "e-${cat.id}") { Text("No dishes yet", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp)) }
                         items(dishes, key = { it.id }) { d ->
                             val idx = dishes.indexOf(d)
-                            Row(
-                                Modifier.fillMaxWidth().clickable(enabled = !reorder) { target = EditorTarget.Edit(d) }.padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
+                            GlassCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp)
+                                .clickable(enabled = !reorder) { target = EditorTarget.Edit(d) }) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 if (d.imageUrl != null) AsyncImage(d.imageUrl, d.name, contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(10.dp)))
                                 else Box(Modifier.size(56.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant))
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -210,6 +222,12 @@ fun MenuHost(
                                         Text(d.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
                                     }
                                     Text(d.basePrice.rupees(), style = MaterialTheme.typography.bodyMedium)
+                                    val extras = s.links.filter { it.dishId == d.id }.mapNotNull { link ->
+                                        val group = s.groups.firstOrNull { it.id == link.groupId } ?: return@mapNotNull null
+                                        val items = s.addons.filter { it.groupId == group.id }.joinToString { it.name }
+                                        "${group.name}${if (group.minSelect == 0) " (optional)" else " (required)"}${items.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()}"
+                                    }
+                                    if (extras.isNotEmpty()) Text("Extras · ${extras.joinToString(" · ")}", style = MaterialTheme.typography.bodySmall)
                                     if (d.stockQty != null) Text("${d.stockQty} left", style = MaterialTheme.typography.labelMedium, color = if (d.stockQty <= 3) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (!d.isAvailable) Text("Out of stock", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
                                 }
@@ -217,6 +235,7 @@ fun MenuHost(
                                     IconButton({ vm.moveDish(d, -1) }, enabled = idx > 0) { Icon(Icons.Default.KeyboardArrowUp, "Move up") }
                                     IconButton({ vm.moveDish(d, 1) }, enabled = idx < dishes.lastIndex) { Icon(Icons.Default.KeyboardArrowDown, "Move down") }
                                 } else Switch(checked = d.isAvailable, onCheckedChange = { vm.toggleAvailable(d) })
+                                }
                             }
                         }
                     }

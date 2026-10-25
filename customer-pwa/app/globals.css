@@ -31,6 +31,10 @@ button { cursor: pointer; }
 .content { padding: 8px 16px 0; }
 
 .tools { display: flex; gap: 10px; align-items: center; padding: 8px 0; }
+.offers { display: grid; gap: 8px; margin: 8px 0 14px; }
+.offers h2 { margin: 0; font-size: 1.05rem; }
+.offer-card { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--haldi); border-radius: var(--radius); background: var(--card); }
+.offer-card small { color: var(--muted); }
 .tools input[type=search] { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
 .chip-toggle input { position: absolute; opacity: 0; }
 .chip-toggle span { display: inline-flex; align-items: center; gap: 6px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); white-space: nowrap; }

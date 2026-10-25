@@ -92,20 +92,29 @@ fun TablesScreen(vm: TablesViewModel, bottomBar: @Composable () -> Unit, onOpenB
                     Modifier.align(Alignment.Center).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("No tables yet", style = MaterialTheme.typography.titleMedium)
-                    Text("Add your tables, print the QR codes and stick one on each table.", style = MaterialTheme.typography.bodyMedium)
+                    ScreenIntro("GET STARTED", "Set up your floor", "Add tables, print their QR codes, and place one at each table.")
                     Button({ showAdd = true }) { Text("Add tables") }
                 }
                 else -> LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    item(key = "floor-overview") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            ScreenIntro("FLOOR OVERVIEW", "Your tables", "Open a table to begin a guest session.")
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                MetricCard("Total", s.tables.size.toString(), Modifier.weight(1f))
+                                MetricCard("Open", s.tables.count { it.status != "closed" }.toString(), Modifier.weight(1f))
+                                MetricCard("Bill ready", s.tables.count { it.status == "bill_requested" }.toString(), Modifier.weight(1f))
+                            }
+                        }
+                    }
                     items(s.tables, key = { it.id }) { t ->
                         var rowMenu by remember { mutableStateOf(false) }
-                        Card(Modifier.fillMaxWidth()) {
-                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(t.label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                    Text(t.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                                     StatusChip(t.status)
                                 }
                                 if (t.status == "closed") {

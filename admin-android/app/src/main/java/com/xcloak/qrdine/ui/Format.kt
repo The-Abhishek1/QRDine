@@ -38,7 +38,20 @@ object Csv {
 }
 
 val LANG_NAMES = mapOf("hi" to "Hindi", "kn" to "Kannada", "mr" to "Marathi", "ta" to "Tamil", "te" to "Telugu")
-val TIME_OF_DAY = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
+val TIME_OF_DAY = Regex("^([01]?\\d|2[0-3])(:[0-5]\\d)?$")
+
+fun normalizeTime(s: String): String? {
+    val t = s.trim()
+    if (t.isBlank()) return null
+    if (t.matches(Regex("^([01]?\\d|2[0-3])$"))) {
+        return "%02d:00".format(t.toInt())
+    }
+    if (t.matches(Regex("^([01]?\\d|2[0-3]):([0-5]\\d)$"))) {
+        val parts = t.split(":")
+        return "%02d:%s".format(parts[0].toInt(), parts[1])
+    }
+    return null
+}
 
 /** Like rupeesToPaise but zero is allowed (an empty drawer is a valid count). */
 fun amountToPaise(text: String): Long? = runCatching {

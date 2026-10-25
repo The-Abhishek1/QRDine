@@ -84,7 +84,6 @@ Dead tokens are removed automatically. The service-account key and the webhook s
 Apply and redeploy (the shared error mapping changed, so redeploy every function):
 
     npx supabase db push
-    printf '[functions.review-submit]\nverify_jwt = false\n[functions.notify]\nverify_jwt = false\n' >> supabase/config.toml
     npx supabase functions deploy session-join session-state order-place service-request qr-sheet review-submit
     # only if you set up push: npx supabase functions deploy notify
 
@@ -130,7 +129,6 @@ Apply, then redeploy **all** functions (shared code changed) and add the new one
 
     cd ~/qrdine/backend
     npx supabase db push
-    cat supabase/config.toml.functions-snippet | grep -A1 -E "session-coupon|staff-admin" >> supabase/config.toml   # only the two new blocks, if not there yet
     npx supabase functions deploy session-join session-state order-place service-request qr-sheet review-submit platform-admin notify session-coupon staff-admin
 
 New functions: `session-coupon` (guest coupons), `staff-admin` (owner creates waiter/kitchen logins).
@@ -142,6 +140,21 @@ move and merge tables; manager-PIN discounts (wrong PINs counted and locked); gu
 live-update pings; platform insights, read-only view-as (logged), broadcast, payment receipts, your business details.
 **Security fix:** your private note about a hotel used to sit in a row the hotel could read. It now lives in `hotel_notes`, which no client can read.
 Tests: `supabase test db` runs 136 checks (14 + 19 + 4 + 25 + 21 + 41 + 12).
+
+## M7: optional extras, Buy N Get M offers, review endpoint config
+Apply the new migration and redeploy the guest functions using the checked-in `supabase/config.toml` (guest-token endpoints must have
+`verify_jwt = false`; they authenticate with their signed guest token instead):
+
+    cd ~/qrdine/backend
+    npx supabase db push
+    npx supabase functions deploy session-join session-state order-place review-submit session-coupon
+
+Existing add-on groups are made optional by setting their minimum selection to zero. Owners manage extras and offers from the Menu
+screen in the Android app. An offer selects one qualifying dish and one reward dish; selecting the same dish creates a same-item deal.
+On each submitted order, every qualifying bundle discounts the cheapest eligible reward units already in that order. Offers do not add
+items to the guest's cart and a reward unit already discounted by an offer cannot be discounted again. The PWA displays active deals,
+previews the free quantities in the cart, and the SQL order function applies the authoritative discount.
+Database checks now total 143, including Buy N Get M repetition, cheapest-reward, non-stacking, and optional-extra checks.
 
 ### Live order updates for guests (optional, recommended)
 The database sends a tiny "something changed" ping on `session:<id>`. Guests refresh instantly when the PWA has

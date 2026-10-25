@@ -42,6 +42,7 @@ class TablesViewModel(restaurantId: String) : ViewModel() {
             "table_not_closed" in m || "same_session" in m -> "Pick a different table."
             "session_not_found" in m -> "You are not allowed to do that, or the table was closed."
             "duplicate key" in m -> "A table with that label already exists."
+            "foreign key constraint" in m || "violates foreign key" in m -> "Tables with past orders or sessions cannot be removed."
             else -> m.take(160)
         }
     }

@@ -27,13 +27,18 @@ export default function ThankYou({ name, paid, canReview, reviewed, onSubmit }: 
   const [service, setService] = useState(0);
   const [comment, setComment] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">(reviewed ? "done" : "idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function send() {
     setState("sending");
+    setErrorMessage(null);
     try {
       await onSubmit({ food: food || undefined, service: service || undefined, comment: comment.trim() || undefined });
       setState("done");
-    } catch { setState("error"); }
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : "Could not send feedback. Please try again.");
+      setState("error");
+    }
   }
 
   return (
@@ -51,7 +56,7 @@ export default function ThankYou({ name, paid, canReview, reviewed, onSubmit }: 
           <Stars label={t("food")} value={food} onChange={setFood} />
           <Stars label={t("service")} value={service} onChange={setService} />
           <textarea rows={3} maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Anything we should know? (optional)" />
-          {state === "error" && <p className="error" role="alert">Could not send. Please try again.</p>}
+          {state === "error" && <p className="error" role="alert">{errorMessage}</p>}
           <button className="btn-primary" onClick={send} disabled={state === "sending" || (!food && !service && !comment.trim())}>
             {state === "sending" ? t("sending") : t("sendFeedback")}
           </button>

@@ -24,6 +24,7 @@ class MenuRepository(private val sb: SupabaseClient, private val restaurantId: S
     suspend fun groups(): List<AddonGroup> = sb.from("addon_groups").select().decodeList<AddonGroup>().sortedBy { it.name.lowercase() }
     suspend fun addons(): List<Addon> = sb.from("addons").select().decodeList<Addon>().sortedBy { it.name.lowercase() }
     suspend fun links(): List<DishAddonLink> = sb.from("dish_addon_groups").select().decodeList<DishAddonLink>()
+    suspend fun offers(): List<Offer> = sb.from("offers").select().decodeList<Offer>().sortedBy { it.name.lowercase() }
 
     suspend fun addCategory(name: String, kind: String, sort: Int) {
         sb.from("categories").insert(NewCategory(restaurantId, name.trim(), kind, sort))
@@ -113,6 +114,16 @@ class MenuRepository(private val sb: SupabaseClient, private val restaurantId: S
     }
 
     suspend fun deleteAddon(id: String) { sb.from("addons").delete { filter { eq("id", id) } } }
+
+    suspend fun addOffer(name: String, buyQty: Int, getQty: Int, buyDishId: String, rewardDishId: String) {
+        sb.from("offers").insert(NewOffer(restaurantId, name.trim(), buyQty, getQty, buyDishId, rewardDishId))
+    }
+
+    suspend fun setOfferActive(id: String, active: Boolean) {
+        sb.from("offers").update({ set("active", active) }) { filter { eq("id", id) } }
+    }
+
+    suspend fun deleteOffer(id: String) { sb.from("offers").delete { filter { eq("id", id) } } }
 
     /** Creates missing categories (by name) and all the dishes. Returns how many dishes were added. */
     suspend fun importDishes(rows: List<CsvDish>): Int {

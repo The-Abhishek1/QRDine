@@ -4,7 +4,7 @@ import { rupees } from "@/lib/money";
 import { useI18n } from "@/lib/i18n";
 import type { CartLine } from "@/lib/cart";
 
-export type CartRow = { line: CartLine; dish: Dish; unit: number; label: string; problem: string | null };
+export type CartRow = { line: CartLine; dish: Dish; unit: number; label: string; problem: string | null; freeQty: number };
 
 export default function CartSheet({
   rows, suggestions, orderType, setOrderType, note, setNote, error, placing, onInc, onDec, onSuggest, onPlace, onClose,
@@ -14,7 +14,7 @@ export default function CartSheet({
   onInc: (key: string) => void; onDec: (key: string) => void; onSuggest: (d: Dish) => void; onPlace: () => void; onClose: () => void;
 }) {
   const { t, pick } = useI18n();
-  const total = rows.reduce((n, r) => n + r.unit * r.line.qty, 0);
+  const total = rows.reduce((n, r) => n + r.unit * (r.line.qty - r.freeQty), 0);
   const blocked = rows.some((r) => r.problem);
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -27,10 +27,11 @@ export default function CartSheet({
         </div>
 
         <ul className="cart-lines">
-          {rows.map(({ line, label, unit, problem }) => (
+          {rows.map(({ line, label, unit, problem, freeQty }) => (
             <li key={line.key}>
               <div>
                 <div className="cart-name">{label}</div>
+                {freeQty > 0 && <div className="cart-note">{t("freeOfferItem", { n: freeQty })}</div>}
                 {line.instructions && <div className="cart-note">“{line.instructions}”</div>}
                 {problem && <div className="warn">{problem}</div>}
               </div>
@@ -40,7 +41,7 @@ export default function CartSheet({
                   <span>{line.qty}</span>
                   <button onClick={() => onInc(line.key)} aria-label={`+ ${label}`}>+</button>
                 </div>
-                <div className="cart-price">{rupees(unit * line.qty)}</div>
+                <div className="cart-price">{rupees(unit * (line.qty - freeQty))}</div>
               </div>
             </li>
           ))}

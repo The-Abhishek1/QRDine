@@ -1,2 +1,20 @@
+[functions.session-join]
+verify_jwt = false
+[functions.session-state]
+verify_jwt = false
+[functions.order-place]
+verify_jwt = false
+[functions.service-request]
+verify_jwt = false
+[functions.qr-sheet]
+verify_jwt = false
+[functions.notify]
+verify_jwt = false
+[functions.review-submit]
+verify_jwt = false
 [functions.platform-admin]
+verify_jwt = false
+[functions.session-coupon]
+verify_jwt = false
+[functions.staff-admin]
 verify_jwt = false

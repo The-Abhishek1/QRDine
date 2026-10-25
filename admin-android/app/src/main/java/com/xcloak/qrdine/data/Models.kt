@@ -389,6 +389,16 @@ data class Addon(
 )
 
 @Serializable
+data class Offer(
+    val id: String, val name: String,
+    @SerialName("buy_qty") val buyQty: Int,
+    @SerialName("get_qty") val getQty: Int,
+    @SerialName("buy_dish_id") val buyDishId: String,
+    @SerialName("reward_dish_id") val rewardDishId: String,
+    val active: Boolean = true,
+)
+
+@Serializable
 data class DishAddonLink(@SerialName("dish_id") val dishId: String, @SerialName("group_id") val groupId: String)
 
 @Serializable
@@ -447,3 +457,8 @@ data class HotelView(
 @Serializable data class NewLink(@SerialName("restaurant_id") val restaurantId: String, @SerialName("dish_id") val dishId: String, @SerialName("group_id") val groupId: String)
 @Serializable data class NewGroup(@SerialName("restaurant_id") val restaurantId: String, val name: String, @SerialName("min_select") val minSelect: Int, @SerialName("max_select") val maxSelect: Int)
 @Serializable data class NewAddon(@SerialName("restaurant_id") val restaurantId: String, @SerialName("group_id") val groupId: String, val name: String, val price: Int)
+@Serializable data class NewOffer(
+    @SerialName("restaurant_id") val restaurantId: String, val name: String,
+    @SerialName("buy_qty") val buyQty: Int, @SerialName("get_qty") val getQty: Int,
+    @SerialName("buy_dish_id") val buyDishId: String, @SerialName("reward_dish_id") val rewardDishId: String,
+)

@@ -58,6 +58,7 @@ fun MainScreen(restaurantId: String, role: String) {
     var showHistory by rememberSaveable { mutableStateOf(false) }
     var showCash by rememberSaveable { mutableStateOf(false) }
     var showAddons by rememberSaveable { mutableStateOf(false) }
+    var showOffers by rememberSaveable { mutableStateOf(false) }
 
     // keyed by restaurant so another login never reuses the previous restaurant's state
     val menuVm: MenuViewModel? = if (role == "owner") viewModel<MenuViewModel>(key = "menu-$restaurantId", factory = MenuViewModel.Factory(restaurantId)) else null
@@ -108,6 +109,7 @@ fun MainScreen(restaurantId: String, role: String) {
     if (showHistory) { HistoryScreen(onClose = { showHistory = false }); return }
     if (showCash) { CashCountScreen(onClose = { showCash = false }); return }
     if (showAddons && menuVm != null) { AddonGroupsScreen(menuVm, onBack = { showAddons = false }); return }
+    if (showOffers && menuVm != null) { OffersScreen(menuVm, onBack = { showOffers = false }); return }
 
     val tabs = if (role == "owner") listOf("orders", "tables", "menu", "insights", "settings") else listOf("orders", "tables", "settings")
     val current = tabs[tab.coerceIn(0, tabs.lastIndex)]
@@ -121,7 +123,7 @@ fun MainScreen(restaurantId: String, role: String) {
     }
 
     val bar: @Composable () -> Unit = {
-        NavigationBar {
+        NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.84f)) {
             tabs.forEachIndexed { i, k ->
                 NavigationBarItem(selected = k == current, onClick = { tab = i }, icon = { Badged(k) }, label = { Text(NAV.getValue(k).label) })
             }
@@ -132,7 +134,11 @@ fun MainScreen(restaurantId: String, role: String) {
         when (current) {
             "orders" -> OrdersScreen(bottomBar = b, onOpenBill = openBill, status = hotelStatus)
             "tables" -> TablesScreen(tablesVm, bottomBar = b, onOpenBill = openBill, canManage = role == "owner")
-            "menu" -> if (menuVm != null) MenuHost(menuVm, bottomBar = b, onAddonGroups = { showAddons = true })
+            "menu" -> if (menuVm != null) MenuHost(
+                menuVm, bottomBar = b,
+                onAddonGroups = { showAddons = true },
+                onOffers = { showOffers = true },
+            )
             "insights" -> InsightsScreen(bottomBar = b, onHistory = { showHistory = true }, onCashCount = { showCash = true })
             else -> SettingsScreen(bottomBar = b, status = hotelStatus, role = role, onKitchenMode = { kitchenMode = it })
         }
@@ -140,7 +146,10 @@ fun MainScreen(restaurantId: String, role: String) {
 
     if (wide) {
         Row(Modifier.fillMaxSize()) {
-            NavigationRail(Modifier.fillMaxHeight().systemBarsPadding()) {
+            NavigationRail(
+                Modifier.fillMaxHeight().systemBarsPadding(),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.84f),
+            ) {
                 tabs.forEachIndexed { i, k ->
                     NavigationRailItem(selected = k == current, onClick = { tab = i }, icon = { Badged(k) }, label = { Text(NAV.getValue(k).label) })
                 }

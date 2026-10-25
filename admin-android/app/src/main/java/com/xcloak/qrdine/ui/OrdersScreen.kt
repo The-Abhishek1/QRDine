@@ -59,21 +59,24 @@ fun OrdersScreen(bottomBar: @Composable () -> Unit, onOpenBill: (String, String)
         topBar = { TopAppBar(title = { Text("Orders", fontWeight = FontWeight.SemiBold) }) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                Modifier.fillMaxWidth()
-                    .background(if (snap.isOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Card(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (snap.isOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                ),
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(if (snap.isOpen) "Open for orders" else "Closed", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (snap.isOpen) "Guests can order. You will be alerted until each order is handled."
-                        else "Guests see \"not taking orders\". Switch on to start.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(if (snap.isOpen) "Accepting orders" else "Orders paused", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (snap.isOpen) "Guests can place orders now."
+                            else "Turn this on when you are ready to serve.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Switch(snap.isOpen, { vm.setOpen(it) }, enabled = snap.loaded && !ui.busy)
                 }
-                Switch(snap.isOpen, { vm.setOpen(it) }, enabled = snap.loaded && !ui.busy)
             }
             SubscriptionBanner(status)
             BroadcastBanner(status)
@@ -81,7 +84,12 @@ fun OrdersScreen(bottomBar: @Composable () -> Unit, onOpenBill: (String, String)
             snap.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall) }
 
             val action = snap.attention + snap.accepted.size
-            TabRow(selectedTabIndex = tab) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricCard("New orders", snap.pending.size.toString(), Modifier.weight(1f))
+                MetricCard("Cooking", snap.accepted.size.toString(), Modifier.weight(1f))
+                MetricCard("Tables in service", snap.serving.size.toString(), Modifier.weight(1f))
+            }
+            TabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp)) {
                 Tab(tab == 0, { tab = 0 }, text = { Text("Needs action" + if (action > 0) " ($action)" else "") })
                 Tab(tab == 1, { tab = 1 }, text = { Text("Serving (${snap.serving.size})") })
             }
