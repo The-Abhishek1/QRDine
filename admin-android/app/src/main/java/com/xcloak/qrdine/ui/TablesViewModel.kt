@@ -25,10 +25,10 @@ data class TablesUiState(
     val shareFile: File? = null,
 )
 
-class TablesViewModel(restaurantId: String) : ViewModel() {
+class TablesViewModel(private val restaurantId: String) : ViewModel() {
     private val sb = QrDineApp.container.supabase
     private val repo = TableRepository(sb, restaurantId)
-    private val auth = QrDineApp.container.auth
+    private val owner = QrDineApp.container.owner
 
     private val _state = MutableStateFlow(TablesUiState())
     val state: StateFlow<TablesUiState> = _state
@@ -51,7 +51,7 @@ class TablesViewModel(restaurantId: String) : ViewModel() {
     fun refresh() {
         viewModelScope.launch {
             try {
-                val name = if (_state.value.restaurantName.isBlank()) runCatching { auth.restaurant().name }.getOrDefault("") else _state.value.restaurantName
+                val name = if (_state.value.restaurantName.isBlank()) runCatching { owner.restaurant(restaurantId).name }.getOrDefault("") else _state.value.restaurantName
                 _state.update { it.copy(loading = false, restaurantName = name, tables = repo.tables()) }
             } catch (e: Exception) {
                 Diagnostics.record(QrDineApp.appContext, e, "tables")

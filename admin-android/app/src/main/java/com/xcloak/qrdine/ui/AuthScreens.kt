@@ -8,6 +8,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.TableRestaurant
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,11 +73,11 @@ fun BrandMark(size: Int = 72) {
             .background(MaterialTheme.colorScheme.primary),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            "QR",
-            color = MaterialTheme.colorScheme.onPrimary,
-            fontWeight = FontWeight.Black,
-            fontSize = (size / 2.5).sp
+        Icon(
+            Icons.Default.Restaurant,
+            contentDescription = "QR Dine",
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size((size * 0.54f).dp),
         )
     }
 }
@@ -98,7 +103,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            BrandMark(80)
+            if (signUp && !forgotPassword) OnboardingStepsHero() else BrandMark(80)
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("QR Dine Admin", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                 Text(
@@ -296,18 +301,19 @@ fun SetupRestaurantScreen(vm: AuthViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            BrandMark(64)
+            OnboardingStepsHero()
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Setup Restaurant", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("Let’s set up your restaurant", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "Submit your hotel details for review. Your free trial starts upon approval.",
+                    "Add your details first. After review, we’ll guide you through menu, tables and QR codes.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             GlassCard(Modifier.fillMaxWidth()) {
-                    Text("STEP 1 OF 1 · HOTEL DETAILS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("YOUR RESTAURANT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("These details appear to guests on your digital menu. Your free trial starts after your application is approved.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it.take(120) },
@@ -349,7 +355,7 @@ fun SetupRestaurantScreen(vm: AuthViewModel = viewModel()) {
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
-                            Text("Submit application", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                Text("Continue", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                         }
                     }
                 }
@@ -357,7 +363,49 @@ fun SetupRestaurantScreen(vm: AuthViewModel = viewModel()) {
             TextButton(onClick = vm::signOut, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                 Text("Sign out")
             }
+
         }
+    }
+}
+
+@Composable
+private fun OnboardingStepsHero() {
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Surface(
+                modifier = Modifier.size(68.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Restaurant, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(38.dp))
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Your digital restaurant", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("A few simple steps to start taking QR orders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        HorizontalDivider()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            OnboardingStepIcon("Details", Icons.Default.Restaurant, active = true)
+            OnboardingStepIcon("Menu", Icons.AutoMirrored.Filled.MenuBook, active = false)
+            OnboardingStepIcon("Tables", Icons.Default.TableRestaurant, active = false)
+            OnboardingStepIcon("QR", Icons.Default.QrCode2, active = false)
+        }
+    }
+}
+
+@Composable
+private fun OnboardingStepIcon(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, active: Boolean) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(21.dp),
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

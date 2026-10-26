@@ -1,7 +1,16 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <!-- a QR-code style mark: three finder squares and a dot grid in turmeric -->
-    <path android:fillColor="#FFFFFF" android:pathData="M30,30h20v20h-20z M58,30h20v20h-20z M30,58h20v20h-20z" />
-    <path android:fillColor="#0B7A6B" android:pathData="M35,35h10v10h-10z M63,35h10v10h-10z M35,63h10v10h-10z" />
-    <path android:fillColor="#F2B632" android:pathData="M58,58h8v8h-8z M70,58h8v8h-8z M58,70h8v8h-8z M70,70h8v8h-8z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M32,61a22,22 0,1 0,44 0a22,22 0,1 0,-44 0 M38,61a16,16 0,1 1,32 0a16,16 0,1 1,-32 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M23,37v14a8,8 0,0 0,16 0V37h-4v12h-2V37h-4v12h-2V37z M27,56h8v29h-8z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,37c-1,0 -2,1 -2,2v17c0,4 2,7 5,8v21h8V37h-4v20h-2V37z" />
+    <path
+        android:fillColor="#FFC36B"
+        android:pathData="M48,20c-5,-5 5,-7 0,-13h5c5,6 -5,8 0,13z M60,24c-5,-5 5,-7 0,-13h5c5,6 -5,8 0,13z" />
 </vector>

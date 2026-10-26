@@ -10,16 +10,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.TableRestaurant
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -27,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -181,8 +188,8 @@ fun MainScreen(restaurantId: String, role: String) {
                 onAddonGroups = { showAddons = true },
                 onOffers = { showOffers = true },
             )
-            "insights" -> InsightsScreen(bottomBar = b, onHistory = { showHistory = true }, onCashCount = { showCash = true })
-            else -> SettingsScreen(bottomBar = b, status = hotelStatus, role = role, onKitchenMode = { kitchenMode = it })
+            "insights" -> InsightsScreen(restaurantId = restaurantId, bottomBar = b, onHistory = { showHistory = true }, onCashCount = { showCash = true })
+            else -> SettingsScreen(restaurantId = restaurantId, bottomBar = b, status = hotelStatus, role = role, onKitchenMode = { kitchenMode = it })
         }
     }
 
@@ -225,6 +232,8 @@ private fun SetupGuideDialog(
                 )
                 SetupGuideStep(
                     number = 1,
+                    icon = Icons.AutoMirrored.Filled.MenuBook,
+                    complete = hasMenu,
                     title = "Add your menu",
                     detail = if (hasMenu) "Menu items are already set up." else "Create dishes or import them from a CSV.",
                     action = if (hasMenu) null else "Open menu",
@@ -232,6 +241,8 @@ private fun SetupGuideDialog(
                 )
                 SetupGuideStep(
                     number = 2,
+                    icon = Icons.Default.TableRestaurant,
+                    complete = tableCount > 0,
                     title = "Set up tables",
                     detail = if (tableCount > 0) "$tableCount ${if (tableCount == 1) "table" else "tables"} ready." else "Create a table for each place guests can sit.",
                     action = if (tableCount > 0) null else "Open tables",
@@ -239,6 +250,8 @@ private fun SetupGuideDialog(
                 )
                 SetupGuideStep(
                     number = 3,
+                    icon = Icons.Default.QrCode2,
+                    complete = false,
                     title = "Print table QR codes",
                     detail = "Print and place one QR code at each table.",
                     action = "Create QR sheet",
@@ -246,6 +259,8 @@ private fun SetupGuideDialog(
                 )
                 SetupGuideStep(
                     number = 4,
+                    icon = Icons.Default.Restaurant,
+                    complete = false,
                     title = "Try the guest flow",
                     detail = "Scan a printed code with another phone and place a test order. Accept it from Orders.",
                     action = null,
@@ -262,16 +277,35 @@ private fun SetupGuideDialog(
 @Composable
 private fun SetupGuideStep(
     number: Int,
+    icon: ImageVector,
+    complete: Boolean,
     title: String,
     detail: String,
     action: String?,
     onClick: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("$number. $title", style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (action != null) TextButton(onClick = onClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
-            Text(action)
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = MaterialTheme.shapes.medium,
+                color = if (complete) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Box(Modifier.fillMaxSize(), androidx.compose.ui.Alignment.Center) {
+                    Icon(
+                        if (complete) Icons.Default.CheckCircle else icon,
+                        contentDescription = null,
+                        tint = if (complete) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("$number. $title", style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (action != null) TextButton(onClick = onClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+                    Text(action)
+                }
+            }
         }
     }
 }

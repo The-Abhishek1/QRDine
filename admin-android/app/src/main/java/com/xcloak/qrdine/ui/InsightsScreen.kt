@@ -62,7 +62,7 @@ private fun buildCsv(rows: List<InvoiceRow>): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InsightsScreen(bottomBar: @Composable () -> Unit, onHistory: () -> Unit = {}, onCashCount: () -> Unit = {}) {
+fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHistory: () -> Unit = {}, onCashCount: () -> Unit = {}) {
     val context = LocalContext.current
     val owner = QrDineApp.container.owner
     val scope = rememberCoroutineScope()
@@ -77,7 +77,7 @@ fun InsightsScreen(bottomBar: @Composable () -> Unit, onHistory: () -> Unit = {}
     var showPicker by remember { mutableStateOf(false) }
     var noteFor by remember { mutableStateOf<ReviewRow?>(null) }
 
-    LaunchedEffect(range, reload, customStart, customEnd) {
+    LaunchedEffect(restaurantId, range, reload, customStart, customEnd) {
         loading = true
         try {
             val today = LocalDate.now(IST)
@@ -89,7 +89,7 @@ fun InsightsScreen(bottomBar: @Composable () -> Unit, onHistory: () -> Unit = {}
             val invoices = owner.invoices(from, to)
             val reviews = runCatching { owner.reviews() }.getOrDefault(emptyList())
             val days = generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
-            val name = runCatching { owner.restaurant().name }.getOrDefault("")
+            val name = runCatching { owner.restaurant(restaurantId).name }.getOrDefault("")
             data = Insights(stats, invoices, reviews, days, name, start, end)
             error = null
         } catch (e: CancellationException) {
@@ -151,7 +151,7 @@ fun InsightsScreen(bottomBar: @Composable () -> Unit, onHistory: () -> Unit = {}
                     val total = (st.cash + st.upi).toFloat()
                     Row(Modifier.fillMaxWidth().height(22.dp).clip(RoundedCornerShape(6.dp))) {
                         if (st.cash > 0) Box(Modifier.weight(st.cash / total).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
-                        if (st.upi > 0) Box(Modifier.weight(st.upi / total).fillMaxHeight().background(Color(0xFFF2B632)))
+                        if (st.upi > 0) Box(Modifier.weight(st.upi / total).fillMaxHeight().background(MaterialTheme.colorScheme.tertiary))
                     }
                     Text("Cash ${st.cash.rupees()}   ·   UPI ${st.upi.rupees()}", style = MaterialTheme.typography.bodyMedium)
                 }
@@ -163,14 +163,14 @@ fun InsightsScreen(bottomBar: @Composable () -> Unit, onHistory: () -> Unit = {}
                     }
                     if (st.dishes.size > 5) Section("Slowest sellers") {
                         val max = st.dishes.maxOf { it.qty }.toFloat()
-                        st.dishes.sortedBy { it.qty }.take(5).forEach { HBar(it.name, it.qty / max, "${it.qty}", Color(0xFFC2371E)) }
+                        st.dishes.sortedBy { it.qty }.take(5).forEach { HBar(it.name, it.qty / max, "${it.qty}", MaterialTheme.colorScheme.error) }
                         Text("Consider a special on these, or remove them from the menu.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
                 if (st.hours.isNotEmpty()) Section("Busy hours (orders)") {
                     val byHour = st.hours.associate { it.hour to it.orders.toLong() }
-                    VBars((0..23).map { byHour[it] ?: 0L }, (0..23).map { if (it % 3 == 0) it.toString() else "" }, Color(0xFFF2B632))
+                    VBars((0..23).map { byHour[it] ?: 0L }, (0..23).map { if (it % 3 == 0) it.toString() else "" }, MaterialTheme.colorScheme.tertiary)
                     val peak = st.hours.maxByOrNull { it.orders }
                     if (peak != null) Text("Busiest: ${peak.hour}:00 to ${peak.hour + 1}:00 (${peak.orders} orders)", style = MaterialTheme.typography.bodySmall)
                 }

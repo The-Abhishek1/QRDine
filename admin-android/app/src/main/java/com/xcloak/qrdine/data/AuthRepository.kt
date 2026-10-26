@@ -4,20 +4,43 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.providers.builtin.Email
-import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 const val AUTH_REDIRECT_URL = "qrdine://auth/callback"
 
+class SignOutException(
+    val localSessionCleared: Boolean,
+    cause: Exception,
+) : Exception("Sign-out could not be completed cleanly.", cause)
+
+class SignInIdentityException(val localSessionCleared: Boolean) :
+    Exception("The authenticated account did not match the sign-in email.")
+
 class AuthRepository(private val sb: SupabaseClient) {
     val status get() = sb.auth.sessionStatus
 
     suspend fun signIn(email: String, password: String) {
+        sb.auth.clearSession()
         sb.auth.signInWith(Email) {
             this.email = email.trim()
             this.password = password
+        }
+        val session = sb.auth.currentSessionOrNull()
+        val authenticatedEmail = session?.user?.email
+            ?: session?.accessToken?.let { Jwt.claim(it, "email") }
+        if (authenticatedEmail?.trim()?.lowercase() != email.trim().lowercase()) {
+            val localSessionCleared = try {
+                sb.auth.clearSession()
+                true
+            } catch (_: Exception) {
+                false
+            }
+            throw SignInIdentityException(localSessionCleared)
         }
     }
 
@@ -42,7 +65,23 @@ class AuthRepository(private val sb: SupabaseClient) {
         sb.auth.updateUser { this.password = password }
     }
 
-    suspend fun signOut() = sb.auth.signOut()
+    fun email(): String? = sb.auth.currentUserOrNull()?.email
+
+    suspend fun signOut() {
+        try {
+            sb.auth.signOut()
+        } catch (e: Exception) {
+            val localSessionCleared = try {
+                withContext(NonCancellable) { sb.auth.clearSession() }
+                true
+            } catch (clearError: Exception) {
+                e.addSuppressed(clearError)
+                false
+            }
+            if (e is CancellationException) throw e
+            throw SignOutException(localSessionCleared, e)
+        }
+    }
 
     /** restaurant_id comes from the access-token hook; null until the user has created a restaurant. */
     fun restaurantId(): String? =
@@ -61,6 +100,4 @@ class AuthRepository(private val sb: SupabaseClient) {
     /** Re-issues the token so the claims (owner / blocked / platform admin) are recalculated. */
     suspend fun refresh() { sb.auth.refreshCurrentSession() }
 
-    suspend fun restaurant(): Restaurant =
-        sb.from("restaurants").select().decodeSingle<Restaurant>()
 }

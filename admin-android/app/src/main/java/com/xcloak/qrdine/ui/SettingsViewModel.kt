@@ -3,6 +3,7 @@ package com.xcloak.qrdine.ui
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
@@ -26,7 +27,7 @@ data class SettingsUi(
     val message: String? = null,
 )
 
-class SettingsViewModel : ViewModel() {
+class SettingsViewModel(private val restaurantId: String) : ViewModel() {
     private val repo = QrDineApp.container.owner
     private val _state = MutableStateFlow(SettingsUi())
     val state: StateFlow<SettingsUi> = _state
@@ -38,13 +39,19 @@ class SettingsViewModel : ViewModel() {
             try {
                 _state.update {
                     it.copy(
-                        loading = false, restaurant = repo.restaurant(), coupons = repo.coupons(),
+                        loading = false, restaurant = repo.restaurant(restaurantId), coupons = repo.coupons(),
                         announcement = repo.todayAnnouncement()?.text.orEmpty(), email = repo.email(),
                     )
                 }
             } catch (e: Exception) {
                 Diagnostics.record(QrDineApp.appContext, e, "settings")
-                _state.update { it.copy(loading = false, message = (e.message ?: "Could not load settings").take(160)) }
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        email = repo.email(),
+                        message = (e.message ?: "Could not load settings").take(160),
+                    )
+                }
             }
         }
     }
@@ -98,4 +105,9 @@ class SettingsViewModel : ViewModel() {
     fun saveAnnouncement(text: String) = act(if (text.isBlank()) "Announcement removed" else "Announcement saved") { repo.setAnnouncement(it, text) }
 
     fun messageShown() = _state.update { it.copy(message = null) }
+
+    class Factory(private val restaurantId: String) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = SettingsViewModel(restaurantId) as T
+    }
 }

@@ -48,8 +48,13 @@ private val TITLES = mapOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(bottomBar: @Composable () -> Unit, status: HotelStatus? = null, role: String = "owner", onKitchenMode: (Boolean) -> Unit = {}, vm: SettingsViewModel = viewModel()) {
+fun SettingsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, status: HotelStatus? = null, role: String = "owner", onKitchenMode: (Boolean) -> Unit = {}) {
+    val vm: SettingsViewModel = viewModel(
+        key = "settings-$restaurantId",
+        factory = SettingsViewModel.Factory(restaurantId),
+    )
     val s by vm.state.collectAsStateWithLifecycle()
+    val auth: AuthViewModel = viewModel()
     val context = LocalContext.current
     var page by rememberSaveable { mutableStateOf("home") }
     val snackbar = remember { SnackbarHostState() }
@@ -71,7 +76,14 @@ fun SettingsScreen(bottomBar: @Composable () -> Unit, status: HotelStatus? = nul
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
                 s.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                r == null -> Text("Could not load your restaurant. Pull to retry from the Orders tab.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.error)
+                r == null -> Column(
+                    Modifier.fillMaxSize().padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("Could not load your restaurant. Pull to retry from the Orders tab.", color = MaterialTheme.colorScheme.error)
+                    Text("Signed in as ${s.email ?: "Unknown account"}", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(onClick = { auth.signOut() }) { Text("Sign out") }
+                }
                 page == "home" -> Home(r, status, role, onOpen = {
                     when (it) {
                         "privacy", "terms" -> openLegalPage(context, it)
@@ -127,6 +139,7 @@ private fun Home(r: Restaurant, status: HotelStatus?, role: String, onOpen: (Str
                 }
             }
         }
+        ThemePreferenceCard()
         if (status != null && (status.state == "grace" || status.state == "expired" || (status.daysLeft ?: 99) <= 7)) {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

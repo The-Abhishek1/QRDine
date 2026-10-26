@@ -1,5 +1,6 @@
 package com.xcloak.qrdine.ui
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,10 +16,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,7 +46,7 @@ fun Int.rupees(): String = if (this % 100 == 0) "₹${this / 100}" else "₹%.2f
 
 @Composable
 fun VegDot(isVeg: Boolean) {
-    val c = if (isVeg) Color(0xFF2E7D32) else Color(0xFFC62828)
+    val c = if (isVeg) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
     Box(Modifier.size(16.dp).border(BorderStroke(1.5.dp, c), RoundedCornerShape(3.dp)).padding(3.dp)) {
         Box(Modifier.fillMaxSize().clip(CircleShape).background(c))
     }
@@ -104,12 +107,16 @@ fun MenuHost(
     var reorder by remember { mutableStateOf(false) }
     var editCategory by remember { mutableStateOf<Category?>(null) }
     var deleteFor by remember { mutableStateOf<Category?>(null) }
+    var showCsvHelp by remember { mutableStateOf(false) }
     val t = target
 
-    val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            val text = runCatching { context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull().orEmpty()
+    val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) try {
+            val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                ?: throw IllegalStateException("The selected file could not be opened.")
             vm.importCsv(text)
+        } catch (e: Exception) {
+            vm.reportCsvReadError(e)
         }
     }
     LaunchedEffect(s.message) { s.message?.let { snackbar.showSnackbar(it); vm.messageShown() } }
@@ -146,7 +153,7 @@ fun MenuHost(
                         DropdownMenuItem(text = { Text("Add category") }, onClick = { menuOpen = false; categoryDialog = true })
                         DropdownMenuItem(text = { Text("Add-on groups (extras)") }, onClick = { menuOpen = false; onAddonGroups() })
                         DropdownMenuItem(text = { Text("Reorder items") }, onClick = { menuOpen = false; reorder = true })
-                        DropdownMenuItem(text = { Text("Import dishes (CSV)") }, onClick = { menuOpen = false; csvPicker.launch("*/*") })
+                        DropdownMenuItem(text = { Text("Import dishes (CSV)") }, leadingIcon = { Icon(Icons.Default.UploadFile, null) }, onClick = { menuOpen = false; showCsvHelp = true })
                         DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuOpen = false; vm.refresh() })
                         DropdownMenuItem(text = { Text("Sign out") }, onClick = { menuOpen = false; authVm.signOut() })
                     }
@@ -166,9 +173,22 @@ fun MenuHost(
                     Modifier.align(Alignment.Center).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    Surface(
+                        modifier = Modifier.size(84.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(44.dp))
+                        }
+                    }
                     ScreenIntro("BUILD YOUR CATALOG", "Start with a category", "For example Starters, Mains, or Beverages. You can also import dishes from a CSV.")
                     Button({ categoryDialog = true }) { Text("Add category") }
-                    OutlinedButton({ csvPicker.launch("*/*") }) { Text("Import dishes (CSV)") }
+                    OutlinedButton(onClick = { showCsvHelp = true }) {
+                        Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Import menu from CSV")
+                    }
                     s.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
@@ -244,6 +264,16 @@ fun MenuHost(
         }
     }
 
+    if (showCsvHelp) {
+        CsvImportGuide(
+            onDismiss = { showCsvHelp = false },
+            onChooseFile = {
+                showCsvHelp = false
+                csvPicker.launch("text/*")
+            },
+        )
+    }
+
     if (categoryDialog) CategoryDialog(null, s.languages, { categoryDialog = false }) { name, kind, i18n, from, to -> vm.addCategory(name, kind, i18n, from, to) }
     editCategory?.let { c -> CategoryDialog(c, s.languages, { editCategory = null }) { name, _, i18n, from, to -> vm.updateCategory(c, name, i18n, from, to) } }
     deleteFor?.let { c ->
@@ -255,4 +285,40 @@ fun MenuHost(
             dismissButton = { TextButton({ deleteFor = null }) { Text("Cancel") } },
         )
     }
+}
+
+@Composable
+private fun CsvImportGuide(onDismiss: () -> Unit, onChooseFile: () -> Unit) {
+    val sample = "category,name,price,veg,description\nMains,\"Paneer Tikka, grilled\",180,y,Smoky paneer"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.UploadFile, null, tint = MaterialTheme.colorScheme.primary) },
+        title = { Text("Prepare your menu CSV") },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Use one dish per row with these columns, in this order:", style = MaterialTheme.typography.bodyMedium)
+                Text("category, name, price, veg, description", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)) {
+                    Text(
+                        sample,
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    )
+                }
+                Text("Category, dish name and price are required. Price is in rupees. Use y/n for veg; you can leave it and the description blank. A header row is okay. Put quotes around a value that contains a comma.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Import adds dishes to your menu. You can edit them afterwards.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(onClick = onChooseFile) {
+                Icon(Icons.Default.UploadFile, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Choose CSV file")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

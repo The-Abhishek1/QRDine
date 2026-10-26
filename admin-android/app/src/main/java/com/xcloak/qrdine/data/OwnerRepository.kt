@@ -88,7 +88,8 @@ class OwnerRepository(private val sb: SupabaseClient) {
     suspend fun hotelStatus(): HotelStatus? = runCatching { sb.postgrest.rpc("my_hotel_status").decodeAs<HotelStatus>() }.getOrNull()
 
     // ---- settings
-    suspend fun restaurant(): Restaurant = sb.from("restaurants").select().decodeSingle<Restaurant>()
+    suspend fun restaurant(id: String): Restaurant =
+        sb.from("restaurants").select { filter { eq("id", id) } }.decodeSingle<Restaurant>()
 
     suspend fun saveProfile(id: String, name: String, address: String, phone: String, fssai: String) {
         sb.from("restaurants").update({

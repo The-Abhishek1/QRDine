@@ -50,7 +50,9 @@ class OrdersViewModel : ViewModel() {
         val ctx = QrDineApp.appContext
         viewModelScope.launch {
             try {
-                val name = runCatching { c.owner.restaurant().name }.getOrDefault("")
+                val name = runCatching {
+                    c.auth.restaurantId()?.let { c.owner.restaurant(it).name }.orEmpty()
+                }.getOrDefault("")
                 Escpos.printKot(ctx, name, card)
             } catch (e: Exception) {
                 Diagnostics.record(QrDineApp.appContext, e, "printer")

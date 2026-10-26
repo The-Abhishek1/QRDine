@@ -5,6 +5,7 @@ import android.content.Context
 import com.xcloak.qrdine.data.AppContainer
 import com.xcloak.qrdine.data.Jwt
 import com.xcloak.qrdine.notify.Notifier
+import com.xcloak.qrdine.ui.AppThemePreference
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +18,7 @@ class QrDineApp : Application() {
     override fun onCreate() {
         super.onCreate()
         appContext = applicationContext
+        AppThemePreference.initialize(this)
         Notifier.createChannels(this)
         Diagnostics.install(this)
         if (configured) appScope.launch {

@@ -54,7 +54,7 @@ fun parseDishCsv(text: String): List<CsvDish> =
         CsvDish(c[0], c[1], price.toInt(), veg, c.getOrNull(4).orEmpty())
     }.toList()
 
-class MenuViewModel(restaurantId: String) : ViewModel() {
+class MenuViewModel(private val restaurantId: String) : ViewModel() {
     private val sb = QrDineApp.container.supabase
     private val repo = MenuRepository(sb, restaurantId)
     private val owner = QrDineApp.container.owner
@@ -67,7 +67,7 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
     fun refresh() {
         viewModelScope.launch {
             try {
-                val rest = runCatching { owner.restaurant() }.getOrNull()
+                val rest = runCatching { owner.restaurant(restaurantId) }.getOrNull()
                 val categories = repo.categories()
                 val dishes = repo.dishes()
                 val variants = repo.variants()
@@ -183,6 +183,11 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
         val rows = parseDishCsv(text)
         if (rows.isEmpty()) { _state.update { it.copy(error = "No dishes found. Use: category, name, price, veg (y/n), description.") }; return }
         run { val n = repo.importDishes(rows); _state.update { it.copy(message = "Imported $n dishes") } }
+    }
+
+    fun reportCsvReadError(e: Exception) {
+        Diagnostics.record(QrDineApp.appContext, e, "menu")
+        _state.update { it.copy(error = "We couldn't read that file. Choose a CSV file and try again.") }
     }
 
     fun addGroup(name: String, min: Int, max: Int) = run { repo.addGroup(name, min, max) }

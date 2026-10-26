@@ -31,19 +31,24 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.HotelRow
 import com.xcloak.qrdine.data.PaymentRow
 import java.time.LocalDate
 
 /** Label, background and text colour for a hotel's state. */
-fun stateStyle(state: String): Triple<String, Color, Color> = when (state) {
-    "pending" -> Triple("Pending approval", Color(0xFFF2B632), Color(0xFF14231F))
-    "trial" -> Triple("Free trial", Color(0xFF2F7DD1), Color.White)
-    "active" -> Triple("Active", Color(0xFF2E7D32), Color.White)
-    "grace" -> Triple("Payment overdue", Color(0xFFE67E22), Color.White)
-    "expired" -> Triple("Expired", Color(0xFFC2371E), Color.White)
-    "hold" -> Triple("On hold", Color(0xFF6B6B6B), Color.White)
-    else -> Triple("Rejected", Color(0xFF8E1B1B), Color.White)
+@Composable
+fun stateStyle(state: String): Triple<String, Color, Color> {
+    val colors = MaterialTheme.colorScheme
+    return when (state) {
+        "pending" -> Triple("Pending approval", colors.tertiaryContainer, colors.onTertiaryContainer)
+        "trial" -> Triple("Free trial", colors.secondaryContainer, colors.onSecondaryContainer)
+        "active" -> Triple("Active", colors.primaryContainer, colors.onPrimaryContainer)
+        "grace" -> Triple("Payment overdue", colors.errorContainer, colors.onErrorContainer)
+        "expired" -> Triple("Expired", colors.errorContainer, colors.onErrorContainer)
+        "hold" -> Triple("On hold", colors.surfaceVariant, colors.onSurfaceVariant)
+        else -> Triple("Rejected", colors.errorContainer, colors.onErrorContainer)
+    }
 }
 
 @Composable
@@ -287,6 +292,11 @@ private fun PlatformSettingsTab(ui: PlatformUi, vm: PlatformViewModel) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ScreenIntro("PLATFORM CONTROLS", "Settings", "Keep support, receipts, and customer communications up to date.")
+        ThemePreferenceCard()
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("SIGNED IN AS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(QrDineApp.container.auth.email() ?: "Account email unavailable", style = MaterialTheme.typography.bodyLarge)
+        }
         GlassCard(Modifier.fillMaxWidth()) {
             Text("APP DIAGNOSTICS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text("Recent Android crashes and handled errors from signed-in hotel accounts. Reports are limited to error type, device/app version, app area, and stack-frame names.", style = MaterialTheme.typography.bodySmall)

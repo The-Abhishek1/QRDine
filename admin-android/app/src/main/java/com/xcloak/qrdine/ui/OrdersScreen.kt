@@ -15,7 +15,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -34,8 +33,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun TableTag(label: String) {
     Text(
-        label, fontWeight = FontWeight.Bold, color = Color(0xFF14231F), style = MaterialTheme.typography.titleLarge,
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFF2B632)).padding(horizontal = 12.dp, vertical = 4.dp),
+        label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.titleLarge,
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 12.dp, vertical = 4.dp),
     )
 }
 

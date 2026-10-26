@@ -1,9 +1,13 @@
 package com.xcloak.qrdine.ui
 
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
+import com.xcloak.qrdine.data.SignInIdentityException
+import com.xcloak.qrdine.data.SignOutException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -43,7 +47,15 @@ class AuthViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 Diagnostics.record(QrDineApp.appContext, e, "auth")
-                _state.value = AuthUiState(error = authError(e))
+                _state.value = AuthUiState(
+                    error = if (e is SignInIdentityException) {
+                        if (e.localSessionCleared) {
+                            "Sign-in was stopped because the authenticated account did not match the email entered."
+                        } else {
+                            "The authenticated account did not match the email entered, and we couldn't clear the session. Restart the app before trying another account."
+                        }
+                    } else authError(e),
+                )
             }
         }
     }
@@ -125,7 +137,24 @@ class AuthViewModel : ViewModel() {
             val ctx = QrDineApp.appContext
             runCatching { com.xcloak.qrdine.notify.Fcm.unregister(ctx) }   // this phone stops receiving pushes
             com.xcloak.qrdine.notify.AlertControl.stopAll(ctx)
-            runCatching { auth.signOut() }
+            try {
+                auth.signOut()
+                _state.value = AuthUiState()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SignOutException) {
+                Diagnostics.record(ctx, e, "auth")
+                val message = if (e.localSessionCleared) {
+                    "Signed out on this device, but the server could not be reached to revoke the session."
+                } else {
+                    "We couldn't clear this device's saved sign-in. Try again before signing in as another account."
+                }
+                _state.value = AuthUiState(error = message)
+                if (!e.localSessionCleared) Toast.makeText(ctx, message, Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Diagnostics.record(ctx, e, "auth")
+                _state.value = AuthUiState(error = "We couldn't sign out. Please try again.")
+            }
         }
     }
 

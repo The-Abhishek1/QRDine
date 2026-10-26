@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -28,10 +27,11 @@ import kotlinx.coroutines.delay
 
 @Composable
 private fun StatusChip(status: String) {
+    val colors = MaterialTheme.colorScheme
     val (label, bg, fg) = when (status) {
-        "active" -> Triple("Open", Color(0xFFD7F0EA), Color(0xFF0B5F53))
-        "bill_requested" -> Triple("Bill requested", Color(0xFFF2B632), Color(0xFF14231F))
-        else -> Triple("Closed", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+        "active" -> Triple("Open", colors.primaryContainer, colors.onPrimaryContainer)
+        "bill_requested" -> Triple("Bill requested", colors.tertiaryContainer, colors.onTertiaryContainer)
+        else -> Triple("Closed", colors.surfaceVariant, colors.onSurfaceVariant)
     }
     Text(
         label, color = fg, style = MaterialTheme.typography.labelLarge,

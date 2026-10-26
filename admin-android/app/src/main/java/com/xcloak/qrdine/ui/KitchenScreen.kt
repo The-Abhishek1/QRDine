@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SoupKitchen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +62,16 @@ fun KitchenScreen(exitLabel: String, onExit: () -> Unit, vm: OrdersViewModel = v
         if (cooking.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Surface(
+                        modifier = Modifier.size(84.dp),
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.SoupKitchen, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(46.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
                     Text("Nothing to cook", style = MaterialTheme.typography.headlineSmall)
                     Text("New orders appear here with a sound.", style = MaterialTheme.typography.bodyLarge)
                 }
