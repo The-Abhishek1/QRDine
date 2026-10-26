@@ -38,13 +38,20 @@ export default function PrivacyPage() {
         <li>
           <strong>Technical information:</strong> the hosting, database, and notification providers may process
           network and diagnostic information necessary to deliver, secure, and troubleshoot the service.
+          If a user enables diagnostics in the Android app, it queues crash and selected handled-error reports for upload to
+          QR Dine&apos;s Supabase project. These reports contain the error class, app area, app and Android versions,
+          device model, and up to eight stack-frame names. They do not include exception messages, authentication
+          tokens, order details, or review text. Reports are available to the platform administrator; reports
+          older than 30 days are purged when the diagnostics service is used. Up to 50 unsent reports are kept on
+          the device. Users can turn diagnostics off or delete unsent reports in the app&apos;s device settings.
         </li>
       </ul>
 
       <h2>How information is used and shared</h2>
       <p>
         Information is used to display restaurant menus, route orders to restaurant staff, provide order and bill
-        status, enable reviews, manage restaurant accounts, send operational notifications, and protect the service.
+        status, enable reviews, manage restaurant accounts, send operational notifications, diagnose app failures,
+        and protect the service.
         Guest order and review information is shared with the restaurant that serves the table. QR Dine uses
         infrastructure providers, including Supabase, to host application data and provide authentication and
         backend services; providers process data on QR Dine&apos;s behalf under their own terms and privacy notices.

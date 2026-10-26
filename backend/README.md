@@ -160,3 +160,21 @@ Database checks now total 143, including Buy N Get M repetition, cheapest-reward
 The database sends a tiny "something changed" ping on `session:<id>`. Guests refresh instantly when the PWA has
 `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set. In Supabase: Realtime settings must allow public channels (the default).
 If it is off or unreachable, the page still polls (every 4 s while something is in progress, 12 s otherwise).
+
+## Android crash and error reports
+Migration `20261026000001_app_diagnostics.sql` creates a private, 30-day diagnostics table. The `app-diagnostics`
+Edge Function accepts minimized reports from authenticated owners/staff and lets only platform admins list reports.
+The Android app queues up to 50 reports locally only after the user opts in under Settings > This device, and uploads
+them after an authenticated session is available. Disabling diagnostics also deletes the local queue.
+Reports contain the exception class, app area, app/Android version, device model, and up to eight stack-frame names;
+they intentionally exclude exception messages, tokens, order data, and review text. Reports older than 30 days
+are purged when the reporting or admin-list endpoint is used.
+
+Deploy after reviewing the diagnostics disclosure in the PWA privacy page:
+
+    cd backend
+    npx supabase db push
+    npx supabase functions deploy app-diagnostics
+
+The Platform > Settings screen shows reports received in the last 30 days. Database test `08_diagnostics.test.sql`
+checks table existence, RLS, and client/service-role privileges. No hosted migration or function deployment is performed by the code change itself.

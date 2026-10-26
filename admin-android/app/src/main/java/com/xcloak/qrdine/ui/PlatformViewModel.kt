@@ -7,6 +7,7 @@ import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.ActivityRow
 import com.xcloak.qrdine.data.AdminResult
 import com.xcloak.qrdine.data.HotelRow
+import com.xcloak.qrdine.data.DiagnosticReport
 import com.xcloak.qrdine.data.PaymentRow
 import com.xcloak.qrdine.data.PlatformSummary
 import com.xcloak.qrdine.data.SupportInfo
@@ -26,6 +27,8 @@ data class PlatformUi(
     val payments: List<PaymentRow> = emptyList(),
     val support: SupportInfo = SupportInfo(),
     val activity: List<ActivityRow> = emptyList(),
+    val diagnostics: List<DiagnosticReport> = emptyList(),
+    val diagnosticsUnavailable: Boolean = false,
     val email: String? = null,
     val message: String? = null,
     val shareFile: File? = null,
@@ -72,10 +75,13 @@ class PlatformViewModel : ViewModel() {
     fun refresh() {
         viewModelScope.launch {
             try {
+                val diagnosticsResult = runCatching { repo.diagnostics() }
                 _state.update {
                     it.copy(
                         loading = false, summary = repo.summary(), hotels = repo.hotels(), payments = repo.payments(),
                         support = repo.support(), activity = repo.activity(), insights = runCatching { repo.insights() }.getOrNull(),
+                        diagnostics = diagnosticsResult.getOrDefault(emptyList()),
+                        diagnosticsUnavailable = diagnosticsResult.isFailure,
                     )
                 }
             } catch (e: Exception) {

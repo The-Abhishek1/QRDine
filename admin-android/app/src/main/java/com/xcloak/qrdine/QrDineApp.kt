@@ -3,10 +3,14 @@ package com.xcloak.qrdine
 import android.app.Application
 import android.content.Context
 import com.xcloak.qrdine.data.AppContainer
+import com.xcloak.qrdine.data.Jwt
 import com.xcloak.qrdine.notify.Notifier
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class QrDineApp : Application() {
@@ -14,6 +18,22 @@ class QrDineApp : Application() {
         super.onCreate()
         appContext = applicationContext
         Notifier.createChannels(this)
+        Diagnostics.install(this)
+        if (configured) appScope.launch {
+            val app = this@QrDineApp
+            val client = container.supabase
+            client.auth.awaitInitialization()
+            container.auth.status.collect { status ->
+                when (status) {
+                    is SessionStatus.Authenticated -> {
+                        Diagnostics.setRestaurantId(app, Jwt.claim(status.session.accessToken, "restaurant_id"))
+                        Diagnostics.flush(app, client)
+                    }
+                    is SessionStatus.NotAuthenticated -> Diagnostics.setRestaurantId(app, null)
+                    else -> Unit
+                }
+            }
+        }
     }
 
     companion object {

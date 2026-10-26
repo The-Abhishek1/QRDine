@@ -7,12 +7,12 @@ import "./globals.css";
 import RegisterSW from "@/components/RegisterSW";
 
 export const metadata: Metadata = {
-  title: "Order at your table",
-  description: "Scan, order and pay at your table.",
+  title: "QR Dine | Good food, no waiting",
+  description: "Scan the QR code at your table to browse the menu, customize your order, and follow updates.",
   referrer: "no-referrer",
   robots: { index: false, follow: false },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0B7A6B" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#F6F8F7" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

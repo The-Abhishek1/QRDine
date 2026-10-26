@@ -2,6 +2,7 @@ package com.xcloak.qrdine.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.OrderCard
 import com.xcloak.qrdine.notify.Prefs
@@ -36,7 +37,11 @@ class OrdersViewModel : ViewModel() {
         _ui.update { it.copy(busy = true) }
         viewModelScope.launch {
             try { block(); c.ordersStore.refresh() }
-            catch (e: Exception) { _ui.update { it.copy(message = friendly(e)) }; c.ordersStore.refresh() }
+            catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "orders")
+                _ui.update { it.copy(message = friendly(e)) }
+                c.ordersStore.refresh()
+            }
             finally { _ui.update { it.copy(busy = false) } }
         }
     }
@@ -48,6 +53,7 @@ class OrdersViewModel : ViewModel() {
                 val name = runCatching { c.owner.restaurant().name }.getOrDefault("")
                 Escpos.printKot(ctx, name, card)
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "printer")
                 _ui.update { it.copy(message = "Could not print: ${(e.message ?: "printer error").take(100)}") }
             }
         }

@@ -3,6 +3,7 @@ package com.xcloak.qrdine.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -90,6 +91,7 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
                     )
                 }
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "menu")
                 _state.update { it.copy(loading = false, error = "Could not load the menu. Check your connection and refresh.") }
             }
         }
@@ -123,6 +125,7 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
                 refresh()
                 onDone()
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "menu")
                 _state.update { it.copy(saving = false, error = friendly(e)) }
             }
         }
@@ -158,7 +161,11 @@ class MenuViewModel(restaurantId: String) : ViewModel() {
         _state.update { s -> s.copy(dishes = s.dishes.map { if (it.id == dish.id) it.copy(isAvailable = !dish.isAvailable) else it }) }
         viewModelScope.launch {
             try { repo.setAvailable(dish.id, !dish.isAvailable) }
-            catch (e: Exception) { _state.update { it.copy(error = friendly(e)) }; refresh() }
+            catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "menu")
+                _state.update { it.copy(error = friendly(e)) }
+                refresh()
+            }
         }
     }
 

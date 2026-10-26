@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.DiningTable
 import com.xcloak.qrdine.data.TableRepository
@@ -53,6 +54,7 @@ class TablesViewModel(restaurantId: String) : ViewModel() {
                 val name = if (_state.value.restaurantName.isBlank()) runCatching { auth.restaurant().name }.getOrDefault("") else _state.value.restaurantName
                 _state.update { it.copy(loading = false, restaurantName = name, tables = repo.tables()) }
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "tables")
                 _state.update { it.copy(loading = false, message = friendly(e)) }
             }
         }
@@ -62,7 +64,10 @@ class TablesViewModel(restaurantId: String) : ViewModel() {
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
             try { block(); _state.update { it.copy(busy = false) }; refresh() }
-            catch (e: Exception) { _state.update { it.copy(busy = false, message = friendly(e)) } }
+            catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "tables")
+                _state.update { it.copy(busy = false, message = friendly(e)) }
+            }
         }
     }
 
@@ -91,6 +96,7 @@ class TablesViewModel(restaurantId: String) : ViewModel() {
                 val file = withContext(Dispatchers.Default) { QrSheet.build(context, _state.value.restaurantName, items) }
                 _state.update { it.copy(busy = false, shareFile = file) }
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "tables")
                 _state.update { it.copy(busy = false, message = "Could not create QR codes: ${friendly(e)}") }
             }
         }

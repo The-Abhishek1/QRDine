@@ -24,6 +24,17 @@ class PlatformRepository(private val sb: SupabaseClient) {
     suspend fun activity(): List<ActivityRow> =
         sb.postgrest.rpc("platform_activity", buildJsonObject { put("p_limit", 40) }).decodeAs<List<ActivityRow>>()
 
+    suspend fun diagnostics(): List<DiagnosticReport> {
+        val response = sb.functions.invoke("app-diagnostics") {
+            method = HttpMethod.Post
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("action", "list") }.toString())
+        }.bodyAsText()
+        val result = json.decodeFromString<DiagnosticResponse>(response)
+        if (!result.ok) error("diagnostics_unavailable")
+        return result.reports
+    }
+
     suspend fun review(rid: String, approve: Boolean, reason: String?, trialDays: Int) {
         sb.postgrest.rpc("platform_review", buildJsonObject {
             put("p_rid", rid); put("p_approve", approve); put("p_trial_days", trialDays)

@@ -288,6 +288,38 @@ private fun PlatformSettingsTab(ui: PlatformUi, vm: PlatformViewModel) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ScreenIntro("PLATFORM CONTROLS", "Settings", "Keep support, receipts, and customer communications up to date.")
         GlassCard(Modifier.fillMaxWidth()) {
+            Text("APP DIAGNOSTICS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text("Recent Android crashes and handled errors from signed-in hotel accounts. Reports are limited to error type, device/app version, app area, and stack-frame names.", style = MaterialTheme.typography.bodySmall)
+            when {
+                ui.diagnosticsUnavailable -> Text("Diagnostics are unavailable. Apply the diagnostics migration and deploy the app-diagnostics function.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                ui.diagnostics.isEmpty() -> Text("No reports in the last 30 days.", style = MaterialTheme.typography.bodySmall)
+                else -> ui.diagnostics.take(50).forEachIndexed { index, report ->
+                    if (index > 0) HorizontalDivider()
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            "${if (report.kind == "crash") "Crash" else "Error"} · ${report.errorType} · ${report.area}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            listOfNotNull(report.restaurantName, report.deviceModel, report.osVersion, "v${report.appVersion}")
+                                .joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "Occurred ${istTime(report.occurredAt, "dd MMM, hh:mm a")} · received ${istTime(report.receivedAt, "dd MMM, hh:mm a")}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (report.frames.isNotEmpty()) {
+                            Text(report.frames.joinToString("\n"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+        GlassCard(Modifier.fillMaxWidth()) {
             Text("SUPPORT & RECEIPTS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text("Hotels see support and payment details when they need help or renewal.", style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(phone, { phone = it.take(30) }, label = { Text("Support phone") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())

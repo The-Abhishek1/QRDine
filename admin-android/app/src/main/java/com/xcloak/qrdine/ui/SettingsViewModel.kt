@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.CouponRow
 import com.xcloak.qrdine.data.ImageUtil
@@ -42,6 +43,7 @@ class SettingsViewModel : ViewModel() {
                     )
                 }
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "settings")
                 _state.update { it.copy(loading = false, message = (e.message ?: "Could not load settings").take(160)) }
             }
         }
@@ -67,6 +69,7 @@ class SettingsViewModel : ViewModel() {
                 load()
                 QrDineApp.container.ordersStore.refresh()
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "settings")
                 _state.update { it.copy(busy = false, message = friendly(e)) }
             }
         }

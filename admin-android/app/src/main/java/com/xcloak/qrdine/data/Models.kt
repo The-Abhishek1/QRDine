@@ -364,6 +364,28 @@ data class ActivityRow(
 )
 
 @Serializable
+data class DiagnosticReport(
+    val id: String,
+    @SerialName("restaurant_id") val restaurantId: String? = null,
+    @SerialName("restaurant_name") val restaurantName: String? = null,
+    val kind: String,
+    @SerialName("error_type") val errorType: String,
+    val area: String,
+    @SerialName("app_version") val appVersion: String,
+    @SerialName("os_version") val osVersion: String,
+    @SerialName("device_model") val deviceModel: String,
+    val frames: List<String> = emptyList(),
+    @SerialName("occurred_at") val occurredAt: String,
+    @SerialName("received_at") val receivedAt: String,
+)
+
+@Serializable
+data class DiagnosticResponse(
+    val ok: Boolean,
+    val reports: List<DiagnosticReport> = emptyList(),
+)
+
+@Serializable
 data class AdminResult(
     val ok: Boolean = false,
     val error: String? = null,

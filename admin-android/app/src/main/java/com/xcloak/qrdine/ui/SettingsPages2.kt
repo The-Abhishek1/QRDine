@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.xcloak.qrdine.QrDineApp
+import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.data.AdminResult
 import com.xcloak.qrdine.data.Restaurant
 import com.xcloak.qrdine.data.StaffRow
@@ -239,15 +240,81 @@ fun LanguagesPage(r: Restaurant) {
 @Composable
 fun DevicePage(onKitchenMode: (Boolean) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var kitchen by remember { mutableStateOf(Prefs.kitchenMode(context)) }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Kitchen display mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Turn this phone or tablet into the kitchen screen: big text, one tap to mark an order ready, rings for each new order, stays awake.", style = MaterialTheme.typography.bodyMedium)
+    var diagnosticsEnabled by remember { mutableStateOf(Diagnostics.isEnabled(context)) }
+    var pendingReports by remember { mutableIntStateOf(Diagnostics.pendingCount(context)) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var diagnosticsMessage by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        GlassCard(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Kitchen display mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Turn this phone or tablet into the kitchen screen: big text, one tap to mark an order ready, rings for each new order, stays awake.", style = MaterialTheme.typography.bodyMedium)
+                }
+                Switch(kitchen, { kitchen = it; Prefs.setKitchenMode(context, it); onKitchenMode(it) })
             }
-            Switch(kitchen, { kitchen = it; Prefs.setKitchenMode(context, it); onKitchenMode(it) })
+            Text("Sign in with the same owner login on the second device, then switch this on there. Or create a Kitchen login under Staff logins.", style = MaterialTheme.typography.bodySmall)
         }
-        Text("Sign in with the same owner login on the second device, then switch this on there. Or create a Kitchen login under Staff logins.", style = MaterialTheme.typography.bodySmall)
+
+        GlassCard(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Share diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Optional. When enabled, crash and selected error reports upload after sign-in to help improve the app.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = diagnosticsEnabled,
+                    onCheckedChange = { enabled ->
+                        Diagnostics.setEnabled(context, enabled)
+                        diagnosticsEnabled = enabled
+                        pendingReports = Diagnostics.pendingCount(context)
+                        diagnosticsMessage = if (enabled) "Diagnostics enabled on this device." else "Diagnostics disabled and queued reports deleted."
+                        if (enabled) scope.launch { Diagnostics.flush(context, QrDineApp.container.supabase) }
+                    },
+                )
+            }
+            Text(
+                "Reports include the error type, app area, app/Android version, device model, and up to 8 stack-frame names. They exclude exception messages, tokens, orders, and review text. Reports are retained for up to 30 days.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                if (diagnosticsEnabled) "$pendingReports report(s) waiting on this device." else "Diagnostics are off. No reports are collected.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            diagnosticsMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+            if (pendingReports > 0) {
+                OutlinedButton(
+                    onClick = { confirmClear = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Delete queued reports") }
+            }
+        }
+    }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Delete queued reports?") },
+            text = { Text("These reports have not uploaded yet. This only removes the copies stored on this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    Diagnostics.clearPending(context)
+                    pendingReports = 0
+                    diagnosticsMessage = "Queued reports deleted."
+                    confirmClear = false
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+        )
     }
 }

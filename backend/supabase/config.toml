@@ -18,3 +18,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.staff-admin]
 verify_jwt = false
+[functions.app-diagnostics]
+verify_jwt = false

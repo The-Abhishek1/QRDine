@@ -2,6 +2,7 @@ package com.xcloak.qrdine.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +42,7 @@ class AuthViewModel : ViewModel() {
                     _state.value = AuthUiState()
                 }
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "auth")
                 _state.value = AuthUiState(error = authError(e))
             }
         }
@@ -69,6 +71,7 @@ class AuthViewModel : ViewModel() {
                 auth.updatePassword(password)
                 _state.update { it.copy(loading = false, recoveryComplete = true, info = "Your password has been updated.") }
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "auth")
                 _state.update { it.copy(loading = false, error = authError(e)) }
             }
         }
@@ -86,6 +89,7 @@ class AuthViewModel : ViewModel() {
                 action()
                 _state.update { it.copy(loading = false, error = null, info = success) }
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "auth")
                 _state.update { it.copy(loading = false, error = authError(e), info = null) }
             }
         }
@@ -110,6 +114,7 @@ class AuthViewModel : ViewModel() {
                 auth.createRestaurant(name, phone, address)
                 _state.value = AuthUiState()
             } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "setup")
                 _state.value = AuthUiState(error = authError(e))
             }
         }

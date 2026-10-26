@@ -19,6 +19,11 @@ Kotlin + Jetpack Compose, supabase-kt. Package: com.xcloak.qrdine, minSdk 26.
 - For local development, confirmation can be disabled in Authentication > Providers > Email; sign-up then creates an active session immediately.
 - Privacy and terms links are available from sign-in and Settings, opening the public PWA pages at `https://qr-dine-admin.vercel.app/privacy` and `/terms`.
   Review those pages with qualified counsel and confirm the legal operator/contact details before store submission.
+- Crashes and selected auth, setup, order, menu, table, settings, printer, and QR-generation errors are collected only if
+  the user opts in under Settings > This device. Reports are queued locally and uploaded after sign-in to the Supabase
+  `app-diagnostics` function. Users can disable reporting (which deletes the local queue) or clear queued reports.
+  Platform > Settings lists recent reports. Apply the diagnostics migration and deploy that function from `backend/README.md`
+  to enable remote reporting; reports older than 30 days are deleted.
 
 ## M1 includes
 Email/password sign-up and sign-in, restaurant setup (create_restaurant rpc + token refresh),
