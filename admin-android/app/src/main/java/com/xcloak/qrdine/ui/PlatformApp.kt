@@ -55,11 +55,9 @@ fun StateChip(state: String) {
 
 @Composable
 private fun Kpi(label: String, value: String, modifier: Modifier, onClick: (() -> Unit)? = null) {
-    Card(modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)) {
-        Column(Modifier.padding(14.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        }
+    GlassCard(modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -134,6 +132,7 @@ private fun DashboardTab(
     val s = ui.summary
     val pending = ui.hotels.filter { it.state == "pending" }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ScreenIntro("PLATFORM OVERVIEW", "SaaS dashboard", "Review applications, monitor subscriptions, and track collections.")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Kpi("Waiting for approval", s.pending.toString(), Modifier.weight(1f)) { onFilter("pending") }
             Kpi("Ending within 7 days", s.expiringSoon.toString(), Modifier.weight(1f))
@@ -155,10 +154,9 @@ private fun DashboardTab(
             OutlinedButton(onPay, Modifier.weight(1f)) { Text("Record payment") }
         }
         if (pending.isNotEmpty()) {
-            Text("Waiting for your approval", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            ScreenIntro("ACTION REQUIRED", "Waiting for approval", "${pending.size} hotel application(s) need a review.")
             pending.forEach { h ->
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                GlassCard(Modifier.fillMaxWidth()) {
                         Text(h.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("${h.ownerEmail ?: "–"} · applied ${dateLabel(h.createdAt)}", style = MaterialTheme.typography.bodySmall)
                         h.phone?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -166,7 +164,6 @@ private fun DashboardTab(
                             Button({ onApprove(h) }) { Text("Approve") }
                             OutlinedButton({ onOpen(h.id) }) { Text("Review") }
                         }
-                    }
                 }
             }
         } else Text("No applications waiting.", style = MaterialTheme.typography.bodyMedium)
@@ -184,6 +181,9 @@ private fun HotelsTab(ui: PlatformUi, filter: String, setFilter: (String) -> Uni
         ok && (q.isBlank() || h.name.contains(q, true) || (h.ownerEmail ?: "").contains(q, true))
     }
     Column(Modifier.fillMaxSize()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            ScreenIntro("CUSTOMER ACCOUNTS", "Hotels", "Search accounts, review their status, and manage access.")
+        }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(q, { q = it }, Modifier.weight(1f), label = { Text("Search name or email") }, singleLine = true)
         }
@@ -198,8 +198,7 @@ private fun HotelsTab(ui: PlatformUi, filter: String, setFilter: (String) -> Uni
         if (list.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("No hotels match.") }
         else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(list, key = { it.id }) { h ->
-                Card(Modifier.fillMaxWidth().clickable { onOpen(h.id) }) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                GlassCard(Modifier.fillMaxWidth().clickable { onOpen(h.id) }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(h.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
                             StateChip(h.state)
@@ -212,7 +211,6 @@ private fun HotelsTab(ui: PlatformUi, filter: String, setFilter: (String) -> Uni
                             },
                             style = MaterialTheme.typography.bodySmall,
                         )
-                    }
                 }
             }
         }
@@ -229,14 +227,15 @@ private fun PaymentsTab(ui: PlatformUi, onRecord: () -> Unit, onExport: (List<Pa
     }
     val byMethod = listOf("cash" to "Cash", "upi" to "UPI", "bank" to "Bank").map { (k, l) -> l to rows.filter { it.method == k }.sumOf { it.amount } }
     Column(Modifier.fillMaxSize()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            ScreenIntro("REVENUE", "Payments", "Review subscription payments and issue receipts.")
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(16.dp, 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("month" to "This month", "30" to "30 days", "all" to "All time").forEach { (k, l) -> FilterChip(range == k, { range = k }, label = { Text(l) }) }
         }
-        Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Collected: ${rows.sumOf { it.amount }.rupees()}  (${rows.size} payments)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(byMethod.joinToString("   ·   ") { "${it.first} ${it.second.rupees()}" }, style = MaterialTheme.typography.bodyMedium)
-            }
+        GlassCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            Text("Collected ${rows.sumOf { it.amount }.rupees()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("${rows.size} payments · " + byMethod.joinToString("   ·   ") { "${it.first} ${it.second.rupees()}" }, style = MaterialTheme.typography.bodyMedium)
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
@@ -252,8 +251,8 @@ private fun PaymentsTab(ui: PlatformUi, onRecord: () -> Unit, onExport: (List<Pa
 
 @Composable
 fun PaymentRowView(p: PaymentRow, trailing: @Composable () -> Unit = {}) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(p.hotelName, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 Text("${dateLabel(p.paidOn)} · ${p.method.uppercase()} · ${p.months} mo" + (p.reference?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodySmall)
@@ -287,46 +286,52 @@ private fun PlatformSettingsTab(ui: PlatformUi, vm: PlatformViewModel) {
     var confirmOut by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Support and payment details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Hotels see these when they are waiting, on hold, or need to renew.", style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(phone, { phone = it.take(30) }, label = { Text("Support phone") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(email, { email = it.trim().take(120) }, label = { Text("Support email") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(info, { info = it.take(600) }, label = { Text("How hotels pay you (UPI ID, bank details)") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-        Text("Printed on payment receipts", style = MaterialTheme.typography.labelLarge)
-        OutlinedTextField(bizName, { bizName = it.take(120) }, label = { Text("Your business name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(bizAddr, { bizAddr = it.take(250) }, label = { Text("Business address") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(bizGst, { bizGst = it.uppercase().filter(Char::isLetterOrDigit).take(15) }, label = { Text("GSTIN (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Button({ vm.saveSupport(phone, email, info, bizName, bizAddr, bizGst) }, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Save") }
-        HorizontalDivider()
+        ScreenIntro("PLATFORM CONTROLS", "Settings", "Keep support, receipts, and customer communications up to date.")
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("SUPPORT & RECEIPTS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text("Hotels see support and payment details when they need help or renewal.", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(phone, { phone = it.take(30) }, label = { Text("Support phone") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(email, { email = it.trim().take(120) }, label = { Text("Support email") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(info, { info = it.take(600) }, label = { Text("How hotels pay you (UPI ID, bank details)") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+            HorizontalDivider()
+            Text("Printed on payment receipts", style = MaterialTheme.typography.labelLarge)
+            OutlinedTextField(bizName, { bizName = it.take(120) }, label = { Text("Your business name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(bizAddr, { bizAddr = it.take(250) }, label = { Text("Business address") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(bizGst, { bizGst = it.uppercase().filter(Char::isLetterOrDigit).take(15) }, label = { Text("GSTIN (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Button({ vm.saveSupport(phone, email, info, bizName, bizAddr, bizGst) }, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Save details") }
+        }
 
-        Text("Message to every hotel", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Shows as a banner in each hotel's Orders screen until they dismiss it or it expires. Send an empty message to clear the current one.", style = MaterialTheme.typography.bodySmall)
-        if (!ui.support.broadcast.isNullOrBlank()) Text("Showing now: ${ui.support.broadcast}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-        OutlinedTextField(bc, { bc = it.take(400) }, label = { Text("Message") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(bcDays, { bcDays = it.filter(Char::isDigit).take(2) }, label = { Text("Show for (days)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Button({ vm.broadcast(bc, bcDays.toIntOrNull() ?: 7); bc = "" }, enabled = !ui.busy && (bc.isNotBlank() || !ui.support.broadcast.isNullOrBlank()) && (bcDays.toIntOrNull() ?: 7) in 1..60, modifier = Modifier.fillMaxWidth()) { Text(if (bc.isBlank()) "Clear the message" else "Send to all hotels") }
-        HorizontalDivider()
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("MESSAGE TO EVERY HOTEL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text("Show an announcement in every hotel's Orders screen. It expires automatically.", style = MaterialTheme.typography.bodySmall)
+            if (!ui.support.broadcast.isNullOrBlank()) Text("Showing now: ${ui.support.broadcast}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            OutlinedTextField(bc, { bc = it.take(400) }, label = { Text("Message") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(bcDays, { bcDays = it.filter(Char::isDigit).take(2) }, label = { Text("Show for (days)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Button({ vm.broadcast(bc, bcDays.toIntOrNull() ?: 7); bc = "" }, enabled = !ui.busy && (bc.isNotBlank() || !ui.support.broadcast.isNullOrBlank()) && (bcDays.toIntOrNull() ?: 7) in 1..60, modifier = Modifier.fillMaxWidth()) { Text(if (bc.isBlank()) "Clear the message" else "Send to all hotels") }
+        }
 
-        Text("Your account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(ui.email ?: "–")
-        OutlinedTextField(pw, { pw = it }, label = { Text("New password (8+)") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(pw2, { pw2 = it }, label = { Text("Repeat new password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(),
-            isError = pw2.isNotEmpty() && pw != pw2)
-        Button({ vm.changePassword(pw); pw = ""; pw2 = "" }, enabled = !ui.busy && pw.length >= 8 && pw == pw2, modifier = Modifier.fillMaxWidth()) { Text("Change password") }
-        HorizontalDivider()
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("YOUR ACCOUNT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(ui.email ?: "–", style = MaterialTheme.typography.bodyMedium)
+            OutlinedTextField(pw, { pw = it }, label = { Text("New password (8+)") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(pw2, { pw2 = it }, label = { Text("Repeat new password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(),
+                isError = pw2.isNotEmpty() && pw != pw2)
+            Button({ vm.changePassword(pw); pw = ""; pw2 = "" }, enabled = !ui.busy && pw.length >= 8 && pw == pw2, modifier = Modifier.fillMaxWidth()) { Text("Change password") }
+        }
 
-        Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        if (ui.activity.isEmpty()) Text("Nothing yet.", style = MaterialTheme.typography.bodySmall)
-        ui.activity.take(25).forEach { a ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) {
-                    Text(actionLabel(a.action), fontWeight = FontWeight.Medium)
-                    a.hotelName?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("RECENT ACTIVITY", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            if (ui.activity.isEmpty()) Text("Nothing yet.", style = MaterialTheme.typography.bodySmall)
+            ui.activity.take(25).forEach { a ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text(actionLabel(a.action), fontWeight = FontWeight.Medium)
+                        a.hotelName?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                    Text(istTime(a.createdAt, "dd MMM, hh:mm a"), style = MaterialTheme.typography.bodySmall)
                 }
-                Text(istTime(a.createdAt, "dd MMM, hh:mm a"), style = MaterialTheme.typography.bodySmall)
             }
         }
-        HorizontalDivider()
         OutlinedButton({ confirmOut = true }, Modifier.fillMaxWidth()) { Text("Sign out") }
         Text("The platform admin account is created by you in the Supabase dashboard (see the backend README).", style = MaterialTheme.typography.bodySmall)
     }

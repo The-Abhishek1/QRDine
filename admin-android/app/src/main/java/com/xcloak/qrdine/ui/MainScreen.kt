@@ -6,10 +6,14 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -23,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xcloak.qrdine.QrDineApp
@@ -63,6 +68,13 @@ fun MainScreen(restaurantId: String, role: String) {
     // keyed by restaurant so another login never reuses the previous restaurant's state
     val menuVm: MenuViewModel? = if (role == "owner") viewModel<MenuViewModel>(key = "menu-$restaurantId", factory = MenuViewModel.Factory(restaurantId)) else null
     val tablesVm: TablesViewModel = viewModel(key = "tables-$restaurantId", factory = TablesViewModel.Factory(restaurantId))
+    val menuState by (menuVm?.state?.collectAsStateWithLifecycle()
+        ?: remember { mutableStateOf(MenuUiState()) })
+    val tablesState by tablesVm.state.collectAsStateWithLifecycle()
+    var showSetupGuide by rememberSaveable(restaurantId) { mutableStateOf(false) }
+    val setupGuidePreferences = remember(context) {
+        context.getSharedPreferences("setup_guide", android.content.Context.MODE_PRIVATE)
+    }
 
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     LaunchedEffect(Unit) {
@@ -73,6 +85,17 @@ fun MainScreen(restaurantId: String, role: String) {
     LaunchedEffect(restaurantId) {
         store.start(restaurantId)
         Fcm.registerIfPossible(context)
+        if (role == "owner") tablesVm.refresh()
+    }
+    LaunchedEffect(restaurantId, role, menuState.loading, menuState.dishes.isEmpty(), tablesState.loading, tablesState.tables.isEmpty()) {
+        val incomplete = menuState.dishes.isEmpty() || tablesState.tables.isEmpty()
+        if (
+            role == "owner" &&
+            !menuState.loading &&
+            !tablesState.loading &&
+            incomplete &&
+            !setupGuidePreferences.getBoolean("dismissed_$restaurantId", false)
+        ) showSetupGuide = true
     }
     // the alert service follows the open/closed switch (a counter tablet or waiter phone rings too). The kitchen rings for accepted orders instead.
     LaunchedEffect(snap.loaded, snap.isOpen, role) {
@@ -115,6 +138,25 @@ fun MainScreen(restaurantId: String, role: String) {
     val current = tabs[tab.coerceIn(0, tabs.lastIndex)]
     val openBill: (String, String) -> Unit = { id, label -> billSession = id; billTable = label }
     val wide = LocalConfiguration.current.screenWidthDp >= 600
+    val dismissSetupGuide = {
+        setupGuidePreferences.edit().putBoolean("dismissed_$restaurantId", true).apply()
+        showSetupGuide = false
+    }
+
+    if (showSetupGuide && role == "owner") {
+        SetupGuideDialog(
+            hasMenu = menuState.dishes.isNotEmpty(),
+            tableCount = tablesState.tables.size,
+            onAddMenu = { dismissSetupGuide(); tab = tabs.indexOf("menu") },
+            onAddTables = { dismissSetupGuide(); tab = tabs.indexOf("tables") },
+            onPrintQr = {
+                dismissSetupGuide()
+                tab = tabs.indexOf("tables")
+                tablesVm.prepareQrSheet(context)
+            },
+            onDismiss = dismissSetupGuide,
+        )
+    }
 
     @Composable
     fun Badged(key: String) {
@@ -157,4 +199,79 @@ fun MainScreen(restaurantId: String, role: String) {
             Box(Modifier.weight(1f).fillMaxHeight()) { screen {} }
         }
     } else screen(bar)
+}
+
+@Composable
+private fun SetupGuideDialog(
+    hasMenu: Boolean,
+    tableCount: Int,
+    onAddMenu: () -> Unit,
+    onAddTables: () -> Unit,
+    onPrintQr: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Get your restaurant ready") },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    "Your restaurant details are submitted. Complete these steps to start taking QR orders.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SetupGuideStep(
+                    number = 1,
+                    title = "Add your menu",
+                    detail = if (hasMenu) "Menu items are already set up." else "Create dishes or import them from a CSV.",
+                    action = if (hasMenu) null else "Open menu",
+                    onClick = onAddMenu,
+                )
+                SetupGuideStep(
+                    number = 2,
+                    title = "Set up tables",
+                    detail = if (tableCount > 0) "$tableCount ${if (tableCount == 1) "table" else "tables"} ready." else "Create a table for each place guests can sit.",
+                    action = if (tableCount > 0) null else "Open tables",
+                    onClick = onAddTables,
+                )
+                SetupGuideStep(
+                    number = 3,
+                    title = "Print table QR codes",
+                    detail = "Print and place one QR code at each table.",
+                    action = "Create QR sheet",
+                    onClick = onPrintQr,
+                )
+                SetupGuideStep(
+                    number = 4,
+                    title = "Try the guest flow",
+                    detail = "Scan a printed code with another phone and place a test order. Accept it from Orders.",
+                    action = null,
+                    onClick = {},
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("I’ll finish later") }
+        },
+    )
+}
+
+@Composable
+private fun SetupGuideStep(
+    number: Int,
+    title: String,
+    detail: String,
+    action: String?,
+    onClick: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("$number. $title", style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (action != null) TextButton(onClick = onClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+            Text(action)
+        }
+    }
 }

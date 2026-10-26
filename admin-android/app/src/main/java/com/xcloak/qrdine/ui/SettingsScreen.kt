@@ -50,6 +50,7 @@ private val TITLES = mapOf(
 @Composable
 fun SettingsScreen(bottomBar: @Composable () -> Unit, status: HotelStatus? = null, role: String = "owner", onKitchenMode: (Boolean) -> Unit = {}, vm: SettingsViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var page by rememberSaveable { mutableStateOf("home") }
     val snackbar = remember { SnackbarHostState() }
     val noBar: @Composable () -> Unit = {}
@@ -71,7 +72,12 @@ fun SettingsScreen(bottomBar: @Composable () -> Unit, status: HotelStatus? = nul
             when {
                 s.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 r == null -> Text("Could not load your restaurant. Pull to retry from the Orders tab.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.error)
-                page == "home" -> Home(r, status, role, onOpen = { page = it })
+                page == "home" -> Home(r, status, role, onOpen = {
+                    when (it) {
+                        "privacy", "terms" -> openLegalPage(context, it)
+                        else -> page = it
+                    }
+                })
                 page == "profile" -> ProfilePage(r, s.busy, vm)
                 page == "billing" -> BillingPage(r, s.busy, vm)
                 page == "ordering" -> OrderingPage(r, s.busy, vm)
@@ -152,6 +158,10 @@ private fun Home(r: Restaurant, status: HotelStatus?, role: String, onOpen: (Str
                 ),
             )
             add("ACCOUNT" to listOf(Triple("account", "Account", "Email, password, sign out")))
+            add("LEGAL" to listOf(
+                Triple("privacy", "Privacy policy", "How QR Dine handles information"),
+                Triple("terms", "Terms of use", "Rules for using QR Dine"),
+            ))
         }
         sections.forEach { (heading, items) ->
             Text(heading, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

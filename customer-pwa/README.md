@@ -24,3 +24,7 @@ Run `npm install` again: a new dependency (`@supabase/supabase-js`) was added fo
 Active Buy N Get M offers appear above the menu. Customers add the qualifying dish and reward dish; the cheapest eligible reward units
 are discounted automatically in the cart and order. Add-on groups default to optional; customers can add extras without being forced to
 choose them. Deploy the M7 backend migration and Edge Functions with the matching `config.toml` before deploying this PWA.
+
+## Legal pages
+Public privacy and terms pages are available at `/privacy` and `/terms`, and linked in the site footer. Review the wording
+with qualified counsel and confirm the operator/contact details before using these pages for a public or store submission.

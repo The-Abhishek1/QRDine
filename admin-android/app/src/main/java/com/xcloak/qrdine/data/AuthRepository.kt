@@ -2,11 +2,14 @@ package com.xcloak.qrdine.data
 
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+
+const val AUTH_REDIRECT_URL = "qrdine://auth/callback"
 
 class AuthRepository(private val sb: SupabaseClient) {
     val status get() = sb.auth.sessionStatus
@@ -20,11 +23,23 @@ class AuthRepository(private val sb: SupabaseClient) {
 
     /** Returns true when a session started; false when the project requires email confirmation first. */
     suspend fun signUp(email: String, password: String): Boolean {
-        sb.auth.signUpWith(Email) {
+        sb.auth.signUpWith(Email, redirectUrl = AUTH_REDIRECT_URL) {
             this.email = email.trim()
             this.password = password
         }
         return sb.auth.currentSessionOrNull() != null
+    }
+
+    suspend fun resendConfirmation(email: String) {
+        sb.auth.resendEmail(OtpType.Email.SIGNUP, email.trim())
+    }
+
+    suspend fun requestPasswordReset(email: String) {
+        sb.auth.resetPasswordForEmail(email.trim(), redirectUrl = AUTH_REDIRECT_URL)
+    }
+
+    suspend fun updatePassword(password: String) {
+        sb.auth.updateUser { this.password = password }
     }
 
     suspend fun signOut() = sb.auth.signOut()

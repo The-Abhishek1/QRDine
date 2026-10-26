@@ -6,8 +6,19 @@ Kotlin + Jetpack Compose, supabase-kt. Package: com.xcloak.qrdine, minSdk 26.
 1. Android Studio > Open > this folder. Let Gradle sync (JDK 17 = Studio's bundled JDK).
 2. Copy `local.properties.example` into `local.properties`, add SUPABASE_URL and SUPABASE_ANON_KEY
    (Supabase dashboard > Project Settings > API). Rebuild.
-3. For development, turn OFF "Confirm email" (Authentication > Providers > Email) so sign-up logs in at once.
+3. Configure Supabase Authentication > URL Configuration:
+   - Add `qrdine://auth/callback` to the allowed redirect URLs.
+   - Enable email confirmation when ready to require owners to verify their address.
+   - Configure a production SMTP/email provider; Supabase's default mail service is limited and is not intended for production delivery.
 4. Run on a device or emulator.
+
+## Owner account email flows
+- With email confirmation enabled, sign-up sends a verification link. The sign-in screen offers a resend action while confirmation is pending.
+- Owners can choose **Forgot password?** to request a reset link, then set a new password in the app after opening it.
+- Both flows redirect to `qrdine://auth/callback`. Keep this URL allowlisted in Supabase, and make sure the email templates use the requested redirect URL.
+- For local development, confirmation can be disabled in Authentication > Providers > Email; sign-up then creates an active session immediately.
+- Privacy and terms links are available from sign-in and Settings, opening the public PWA pages at `https://qr-dine-admin.vercel.app/privacy` and `/terms`.
+  Review those pages with qualified counsel and confirm the legal operator/contact details before store submission.
 
 ## M1 includes
 Email/password sign-up and sign-in, restaurant setup (create_restaurant rpc + token refresh),

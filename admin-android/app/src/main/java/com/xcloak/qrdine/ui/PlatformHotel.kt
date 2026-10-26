@@ -42,46 +42,43 @@ fun HotelDetailScreen(h: HotelRow, ui: PlatformUi, vm: PlatformViewModel, snackb
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("HOTEL ACCOUNT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StateChip(h.state)
-                Text(h.ownerEmail ?: "No owner login", style = MaterialTheme.typography.bodyMedium)
+                    Text(h.ownerEmail ?: "No owner login", style = MaterialTheme.typography.bodyMedium)
+                }
             }
             if (h.state == "hold" && !h.holdReason.isNullOrBlank()) Text("Hold reason: ${h.holdReason}", style = MaterialTheme.typography.bodyMedium)
 
             if (h.approval != "approved") {
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                GlassCard(Modifier.fillMaxWidth()) {
                         Text(if (h.approval == "pending") "This hotel is waiting for your approval." else "This application was rejected.", fontWeight = FontWeight.SemiBold)
                         Text("Until it is approved the owner sees a waiting message and guests cannot order.", style = MaterialTheme.typography.bodySmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button({ dialog = "approve" }) { Text("Approve") }
                             if (h.approval == "pending") OutlinedButton({ dialog = "reject" }) { Text("Reject") }
                         }
-                    }
                 }
             }
 
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Info("Phone", h.phone); Info("Address", h.address); Info("GSTIN", h.gstin)
-                    Info("Applied", dateLabel(h.createdAt)); Info("Approved", dateLabel(h.approvedAt)); Info("Tables", h.tables.toString())
-                    Info("Orders (30 days)", h.orders30d.toString()); Info("Last order", h.lastOrderAt?.let { ago(it) } ?: "none yet")
-                    if (!h.adminNote.isNullOrBlank()) Info("Your note", h.adminNote)
-                }
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("HOTEL DETAILS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Info("Phone", h.phone); Info("Address", h.address); Info("GSTIN", h.gstin)
+                Info("Applied", dateLabel(h.createdAt)); Info("Approved", dateLabel(h.approvedAt)); Info("Tables", h.tables.toString())
+                Info("Orders (30 days)", h.orders30d.toString()); Info("Last order", h.lastOrderAt?.let { ago(it) } ?: "none yet")
+                if (!h.adminNote.isNullOrBlank()) Info("Your note", h.adminNote)
             }
 
             if (h.approval == "approved") {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Subscription", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Info("Paid through", dateLabel(h.paidThrough)); Info("Trial ends", dateLabel(h.trialEndsAt))
-                        Info("Subscription", h.subExpiresAt?.let { "until ${dateLabel(it)}" } ?: "none"); Info("Total paid", h.totalPaid.rupees())
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                            Button({ dialog = "payment" }) { Text("Record payment") }
-                            OutlinedButton({ dialog = "extend" }) { Text("Extend") }
-                            TextButton({ dialog = "dates" }) { Text("Dates") }
-                        }
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("SUBSCRIPTION", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Info("Paid through", dateLabel(h.paidThrough)); Info("Trial ends", dateLabel(h.trialEndsAt))
+                    Info("Subscription", h.subExpiresAt?.let { "until ${dateLabel(it)}" } ?: "none"); Info("Total paid", h.totalPaid.rupees())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                        Button({ dialog = "payment" }) { Text("Record payment") }
+                        OutlinedButton({ dialog = "extend" }) { Text("Extend") }
+                        TextButton({ dialog = "dates" }) { Text("Dates") }
                     }
                 }
             }

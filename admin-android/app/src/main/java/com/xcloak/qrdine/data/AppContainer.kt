@@ -2,6 +2,7 @@ package com.xcloak.qrdine.data
 
 import com.xcloak.qrdine.BuildConfig
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.auth.FlowType
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.functions.Functions
 import io.github.jan.supabase.postgrest.Postgrest
@@ -14,7 +15,11 @@ class AppContainer {
         supabaseUrl = BuildConfig.SUPABASE_URL,
         supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
     ) {
-        install(Auth)
+        install(Auth) {
+            scheme = "qrdine"
+            host = "auth"
+            flowType = FlowType.IMPLICIT
+        }
         install(Postgrest)
         install(Storage)
         install(Functions)

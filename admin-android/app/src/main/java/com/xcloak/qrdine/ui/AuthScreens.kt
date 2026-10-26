@@ -80,9 +80,11 @@ fun BrandMark(size: Int = 72) {
 @Composable
 fun AuthScreen(vm: AuthViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var signUp by rememberSaveable { mutableStateOf(false) }
+    var forgotPassword by rememberSaveable { mutableStateOf(false) }
     var show by rememberSaveable { mutableStateOf(false) }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -100,21 +102,26 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("QR Dine Admin", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    if (signUp) "Create your account to get started" else "Sign in to manage your restaurant",
+                    when {
+                        forgotPassword -> "We'll email you a secure reset link"
+                        signUp -> "Create your account to get started"
+                        else -> "Sign in to manage your restaurant"
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            Card(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                    Text(
+                        when {
+                            forgotPassword -> "PASSWORD RECOVERY"
+                            signUp -> "CREATE YOUR RESTAURANT ACCOUNT"
+                            else -> "WELCOME BACK"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
@@ -124,20 +131,34 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Password (8+ characters)") },
-                        singleLine = true,
-                        visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = { TextButton({ show = !show }) { Text(if (show) "Hide" else "Show") } },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    if (!forgotPassword) {
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("Password (8+ characters)") },
+                            singleLine = true,
+                            visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = { TextButton({ show = !show }) { Text(if (show) "Hide" else "Show") } },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
                     Messages(s)
+                    if (s.verificationPending) {
+                        OutlinedButton(
+                            onClick = { vm.resendConfirmation(email) },
+                            enabled = !s.loading,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Resend confirmation email")
+                        }
+                    }
                     Button(
-                        onClick = { vm.submit(email, password, signUp) },
+                        onClick = {
+                            if (forgotPassword) vm.requestPasswordReset(email)
+                            else vm.submit(email, password, signUp)
+                        },
                         enabled = !s.loading,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -151,17 +172,106 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
-                            Text(if (signUp) "Create account" else "Sign in", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Text(
+                                when {
+                                    forgotPassword -> "Send reset link"
+                                    signUp -> "Create account"
+                                    else -> "Sign in"
+                                },
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp
+                            )
                         }
                     }
                 }
-            }
 
-            TextButton(
-                onClick = { signUp = !signUp; vm.clearMessages() },
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            ) {
-                Text(if (signUp) "Already have an account? Sign in" else "New restaurant? Create an account")
+            if (forgotPassword) {
+                TextButton(
+                    onClick = { forgotPassword = false; vm.clearMessages() },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) { Text("Back to sign in") }
+            } else {
+                if (!signUp) {
+                    TextButton(
+                        onClick = { forgotPassword = true; vm.clearMessages() },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) { Text("Forgot password?") }
+                }
+                TextButton(
+                    onClick = { signUp = !signUp; vm.clearMessages() },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text(if (signUp) "Already have an account? Sign in" else "New restaurant? Create an account")
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = { openLegalPage(context, "privacy") }) { Text("Privacy") }
+                TextButton(onClick = { openLegalPage(context, "terms") }) { Text("Terms") }
+            }
+        }
+    }
+}
+
+@Composable
+fun PasswordRecoveryScreen(vm: AuthViewModel = viewModel()) {
+    val s by vm.state.collectAsStateWithLifecycle()
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmation by rememberSaveable { mutableStateOf("") }
+
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .systemBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            BrandMark(80)
+            Text("Reset your password", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            GlassCard(Modifier.fillMaxWidth()) {
+                if (!s.recoveryComplete) {
+                    Text("Choose a new password for your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("New password (8+ characters)") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = confirmation,
+                        onValueChange = { confirmation = it },
+                        label = { Text("Confirm new password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Messages(s)
+                    Button(
+                        onClick = { vm.updateRecoveryPassword(password, confirmation) },
+                        enabled = !s.loading,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (s.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        else Text("Update password", fontWeight = FontWeight.SemiBold)
+                    }
+                } else {
+                    Messages(s)
+                    Button(
+                        onClick = vm::finishRecovery,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("Continue to QR Dine") }
+                }
             }
         }
     }
@@ -196,15 +306,8 @@ fun SetupRestaurantScreen(vm: AuthViewModel = viewModel()) {
                 )
             }
 
-            Card(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                    Text("STEP 1 OF 1 · HOTEL DETAILS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it.take(120) },
@@ -250,7 +353,6 @@ fun SetupRestaurantScreen(vm: AuthViewModel = viewModel()) {
                         }
                     }
                 }
-            }
 
             TextButton(onClick = vm::signOut, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                 Text("Sign out")
@@ -304,15 +406,8 @@ fun BlockedScreen(initial: String, vm: AuthViewModel = viewModel()) {
                 }
             }
 
-            Card(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                    Text("ACCOUNT STATUS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     Text(body, style = MaterialTheme.typography.bodyLarge)
                     status?.note?.takeIf { it.isNotBlank() }?.let {
                         Card(
@@ -336,7 +431,6 @@ fun BlockedScreen(initial: String, vm: AuthViewModel = viewModel()) {
                                 }
                             }
                         }
-                    }
                 }
             }
 

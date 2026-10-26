@@ -29,6 +29,11 @@ fun AppRoot() {
         }
         return
     }
+    val recoveryPending by QrDineApp.passwordRecoveryPending.collectAsStateWithLifecycle()
+    if (recoveryPending) {
+        PasswordRecoveryScreen()
+        return
+    }
     val root: RootViewModel = viewModel()
     val state by root.state.collectAsStateWithLifecycle()
     when (val s = state) {

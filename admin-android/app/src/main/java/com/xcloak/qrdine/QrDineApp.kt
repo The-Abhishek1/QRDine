@@ -7,6 +7,7 @@ import com.xcloak.qrdine.notify.Notifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class QrDineApp : Application() {
     override fun onCreate() {
@@ -18,6 +19,8 @@ class QrDineApp : Application() {
     companion object {
         lateinit var appContext: Context
             private set
+
+        val passwordRecoveryPending = MutableStateFlow(false)
 
         /** Lives as long as the process: the order store and the alert service run in it. */
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
