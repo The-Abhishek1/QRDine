@@ -3,12 +3,12 @@ export type Category = {
   id: string; name: string; kind: string; sort: number; name_i18n: I18n;
   avail_from: string | null; avail_to: string | null; open_now: boolean;
 };
-export type Variant = { id: string; name: string; price: number };
+export type Variant = { id: string; name: string; price: number; original_price: number | null };
 export type Addon = { id: string; name: string; price: number; is_available: boolean };
 export type AddonGroup = { id: string; name: string; min_select: number; max_select: number; addons: Addon[] };
 export type Dish = {
   id: string; category_id: string; name: string; description: string | null; image_url: string | null;
-  base_price: number; is_veg: boolean; is_available: boolean; sort: number;
+  base_price: number; original_price: number | null; is_veg: boolean; is_available: boolean; sort: number;
   name_i18n: I18n; description_i18n: I18n; stock_left: number | null;
   variants: Variant[]; addon_groups: AddonGroup[];
 };

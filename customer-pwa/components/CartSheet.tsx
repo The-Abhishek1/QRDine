@@ -21,7 +21,7 @@ export default function CartSheet({
       <div className="sheet" role="dialog" aria-modal="true" aria-label={t("yourOrder")} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head"><h2>{t("yourOrder")}</h2><button className="link" onClick={onClose}>{t("close")}</button></div>
 
-        <div className="seg" role="radiogroup" aria-label="Order type">
+        <div className="seg" role="radiogroup" aria-label={t("orderType")}>
           <button role="radio" aria-checked={orderType === "dine_in"} className={orderType === "dine_in" ? "on" : ""} onClick={() => setOrderType("dine_in")}>{t("eatHere")}</button>
           <button role="radio" aria-checked={orderType === "parcel"} className={orderType === "parcel" ? "on" : ""} onClick={() => setOrderType("parcel")}>{t("parcel")}</button>
         </div>
@@ -37,9 +37,9 @@ export default function CartSheet({
               </div>
               <div className="cart-right">
                 <div className="stepper" role="group" aria-label={label}>
-                  <button onClick={() => onDec(line.key)} aria-label={`− ${label}`}>−</button>
+                  <button onClick={() => onDec(line.key)} aria-label={`${t("remove")} ${label}`}>−</button>
                   <span>{line.qty}</span>
-                  <button onClick={() => onInc(line.key)} aria-label={`+ ${label}`}>+</button>
+                  <button onClick={() => onInc(line.key)} aria-label={`${t("add")} ${label}`}>+</button>
                 </div>
                 <div className="cart-price">{rupees(unit * (line.qty - freeQty))}</div>
               </div>

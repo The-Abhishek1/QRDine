@@ -42,7 +42,7 @@ export default function DishSheet({ dish, onAdd, onClose }: { dish: Dish; onAdd:
             {dish.variants.map((v) => (
               <label key={v.id} className="opt">
                 <input type="radio" name="variant" checked={variantId === v.id} onChange={() => setVariantId(v.id)} />
-                <span>{v.name}</span><b>{rupees(v.price)}</b>
+                <span>{v.name}</span><b className="price-pair"><span>{rupees(v.price)}</span>{v.original_price != null && v.original_price > v.price && <del>{rupees(v.original_price)}</del>}</b>
               </label>
             ))}
           </fieldset>
@@ -72,8 +72,8 @@ export default function DishSheet({ dish, onAdd, onClose }: { dish: Dish; onAdd:
         </label>
 
         <div className="sheet-actions">
-          <div className="stepper" role="group" aria-label="Quantity">
-            <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="−">−</button><span>{qty}</span><button onClick={() => setQty((q) => Math.min(50, q + 1))} aria-label="+">+</button>
+          <div className="stepper" role="group" aria-label={t("quantity")}>
+            <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label={t("remove")}>−</button><span>{qty}</span><button onClick={() => setQty((q) => Math.min(50, q + 1))} aria-label={t("add")}>+</button>
           </div>
           <button className="btn-primary" disabled={!valid} onClick={() => { onAdd({ key: lineKey(dish.id, variantId, addonIds, note), dishId: dish.id, qty, variantId, addonIds, instructions: note.trim() }); onClose(); }}>
             {t("addToOrder")} · {rupees(price)}

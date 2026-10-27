@@ -105,7 +105,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
         ) {
             if (signUp && !forgotPassword) OnboardingStepsHero() else BrandMark(80)
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("QR Dine Admin", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                Text("QR Dine Admin", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
                     when {
                         forgotPassword -> "We'll email you a secure reset link"
@@ -134,7 +134,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = MaterialTheme.shapes.medium
                     )
                     if (!forgotPassword) {
                         OutlinedTextField(
@@ -146,7 +146,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                             trailingIcon = { TextButton({ show = !show }) { Text(if (show) "Hide" else "Show") } },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = MaterialTheme.shapes.medium
                         )
                     }
                     Messages(s)
@@ -168,7 +168,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = MaterialTheme.shapes.medium
                     ) {
                         if (s.loading) {
                             CircularProgressIndicator(
@@ -247,7 +247,7 @@ fun PasswordRecoveryScreen(vm: AuthViewModel = viewModel()) {
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(18.dp)
                     )
                     OutlinedTextField(
                         value = confirmation,
@@ -346,7 +346,7 @@ fun SetupRestaurantScreen(vm: AuthViewModel = viewModel()) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(18.dp)
                     ) {
                         if (s.loading) {
                             CircularProgressIndicator(
@@ -372,17 +372,28 @@ fun SetupRestaurantScreen(vm: AuthViewModel = viewModel()) {
 private fun OnboardingStepsHero() {
     GlassCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Surface(
-                modifier = Modifier.size(68.dp),
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Restaurant, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(38.dp))
+            Box {
+                Surface(
+                    modifier = Modifier.size(68.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Restaurant, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(38.dp))
+                    }
+                }
+                Surface(
+                    modifier = Modifier.align(Alignment.TopEnd).size(25.dp),
+                    shape = RoundedCornerShape(9.dp),
+                    color = MaterialTheme.colorScheme.tertiary,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.QrCode2, null, tint = MaterialTheme.colorScheme.onTertiary, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Your digital restaurant", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Your digital restaurant", style = MaterialTheme.typography.titleLarge)
                 Text("A few simple steps to start taking QR orders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

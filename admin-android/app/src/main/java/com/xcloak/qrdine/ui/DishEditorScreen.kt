@@ -54,7 +54,7 @@ fun DishEditorScreen(
     languages: List<String>,
     saving: Boolean,
     error: String?,
-    onSave: (DishForm, ByteArray?, List<Pair<String, Int>>, Set<String>) -> Unit,
+    onSave: (DishForm, ByteArray?, List<Triple<String, Int, Int?>>, Set<String>) -> Unit,
     onDelete: (Dish) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -64,6 +64,7 @@ fun DishEditorScreen(
     var name by rememberSaveable { mutableStateOf(existing?.name ?: "") }
     var description by rememberSaveable { mutableStateOf(existing?.description ?: "") }
     var price by rememberSaveable { mutableStateOf(existing?.let { rs(it.basePrice) } ?: "") }
+    var originalPrice by rememberSaveable { mutableStateOf(existing?.originalPrice?.let(::rs) ?: "") }
     var isVeg by rememberSaveable { mutableStateOf(existing?.isVeg ?: true) }
     var categoryId by rememberSaveable { mutableStateOf(existing?.categoryId ?: categories.firstOrNull()?.id ?: "") }
     var stock by rememberSaveable { mutableStateOf(existing?.stockQty?.toString() ?: "") }
@@ -71,6 +72,7 @@ fun DishEditorScreen(
     val descTr = remember { mutableStateMapOf<String, String>().apply { existing?.descriptionI18n?.let { putAll(it) } } }
     val vNames = remember { mutableStateListOf<String>().apply { addAll(variants.map { it.name }) } }
     val vPrices = remember { mutableStateListOf<String>().apply { addAll(variants.map { rs(it.price) }) } }
+    val vOriginalPrices = remember { mutableStateListOf<String>().apply { addAll(variants.map { it.originalPrice?.let(::rs).orEmpty() }) } }
     var picked by remember { mutableStateOf(linked) }
     var pickedUri by remember { mutableStateOf<Uri?>(null) }
     var imageBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -89,10 +91,18 @@ fun DishEditorScreen(
     }
 
     val pricePaise = parsePaise(price)
-    val variantList = vNames.indices.map { vNames[it].trim() to parsePaise(vPrices[it]) }
-    val variantsOk = variantList.all { it.first.isNotBlank() && it.second != null && it.second!! > 0 }
+    val originalPaise = originalPrice.takeIf { it.isNotBlank() }?.let(::parsePaise)
+    val originalOk = originalPrice.isBlank() || (originalPaise != null && pricePaise != null && originalPaise > pricePaise)
+    val variantList = vNames.indices.map { i ->
+        Triple(vNames[i].trim(), parsePaise(vPrices[i]), vOriginalPrices[i].takeIf { it.isNotBlank() }?.let(::parsePaise))
+    }
+    val variantsOk = vNames.indices.all { i ->
+        val (name, amount, original) = variantList[i]
+        name.isNotBlank() && amount != null && amount > 0 &&
+            (vOriginalPrices[i].isBlank() || (original != null && original > amount))
+    }
     val stockOk = stock.isBlank() || stock.toIntOrNull() != null
-    val canSave = name.isNotBlank() && pricePaise != null && categoryId.isNotBlank() && variantsOk && stockOk && !saving
+    val canSave = name.isNotBlank() && pricePaise != null && originalOk && categoryId.isNotBlank() && variantsOk && stockOk && !saving
 
     Scaffold(
         topBar = {
@@ -121,6 +131,12 @@ fun DishEditorScreen(
                 supportingText = { Text(if (price.isNotBlank() && pricePaise == null) "Use a number like 120 or 120.50" else if (vNames.isNotEmpty()) "Guests pay the price of the size they pick; this is the fallback." else "") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
             )
+            OutlinedTextField(
+                originalPrice, { originalPrice = it }, label = { Text("Original/list price (optional, ₹)") }, singleLine = true,
+                isError = originalPrice.isNotBlank() && !originalOk,
+                supportingText = { Text(if (!originalOk) "Original price must be greater than the selling price." else "Shown struck through beside the selling price.") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
+            )
 
             ExposedDropdownMenuBox(catOpen, { catOpen = it }) {
                 OutlinedTextField(
@@ -146,16 +162,23 @@ fun DishEditorScreen(
 
             HorizontalDivider()
             Text("Sizes (optional)", style = MaterialTheme.typography.titleMedium)
-            Text("For example Half and Full. The guest must pick one.", style = MaterialTheme.typography.bodySmall)
+            Text("For example Half and Full. The guest must pick one. Add an original price per size if it is on sale.", style = MaterialTheme.typography.bodySmall)
             vNames.indices.forEach { i ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(vNames[i], { vNames[i] = it.take(40) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(vPrices[i], { vPrices[i] = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("₹") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(100.dp))
-                    TextButton({ vNames.removeAt(i); vPrices.removeAt(i) }) { Text("✕") }
+                    TextButton({ vNames.removeAt(i); vPrices.removeAt(i); vOriginalPrices.removeAt(i) }) { Text("✕") }
                 }
+                OutlinedTextField(
+                    vOriginalPrices[i], { vOriginalPrices[i] = it.filter { c -> c.isDigit() || c == '.' }.take(8) },
+                    label = { Text("${vNames[i].ifBlank { "Size" }} original/list price (optional, ₹)") }, singleLine = true,
+                    isError = vOriginalPrices[i].isNotBlank() &&
+                        (parsePaise(vOriginalPrices[i]) == null || parsePaise(vPrices[i]) == null || parsePaise(vOriginalPrices[i])!! <= parsePaise(vPrices[i])!!),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
+                )
             }
-            OutlinedButton({ vNames.add(""); vPrices.add("") }) { Text("Add a size") }
+            OutlinedButton({ vNames.add(""); vPrices.add(""); vOriginalPrices.add("") }) { Text("Add a size") }
 
             if (groups.isNotEmpty()) {
                 HorizontalDivider()
@@ -181,8 +204,9 @@ fun DishEditorScreen(
                         DishForm(
                             name, description, pricePaise!!, isVeg, categoryId, stock.toIntOrNull(),
                             nameTr.filterValues { it.isNotBlank() }.takeIf { it.isNotEmpty() }, descTr.filterValues { it.isNotBlank() }.takeIf { it.isNotEmpty() },
+                            originalPaise,
                         ),
-                        imageBytes, variantList.map { it.first to it.second!! }, picked,
+                        imageBytes, variantList.map { Triple(it.first, it.second!!, it.third) }, picked,
                     )
                 },
                 enabled = canSave, modifier = Modifier.fillMaxWidth().height(50.dp),

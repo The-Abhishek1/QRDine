@@ -76,5 +76,6 @@ dependencies {
     implementation(libs.zxing.core)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.kotlinx.serialization.json)
+    testImplementation(libs.junit)
     implementation(libs.coil.compose)
 }

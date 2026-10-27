@@ -3,12 +3,11 @@ package com.xcloak.qrdine.data
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.util.UUID
-
-data class CsvDish(val category: String, val name: String, val pricePaise: Int, val isVeg: Boolean, val description: String)
 
 class MenuRepository(private val sb: SupabaseClient, private val restaurantId: String) {
 
@@ -58,6 +57,7 @@ class MenuRepository(private val sb: SupabaseClient, private val restaurantId: S
                 restaurantId = restaurantId, categoryId = form.categoryId, name = form.name.trim(),
                 description = form.description.trim().ifBlank { null }, imageUrl = imageUrl, basePrice = form.pricePaise,
                 isVeg = form.isVeg, stockQty = form.stockQty, nameI18n = form.nameI18n, descriptionI18n = form.descI18n,
+                originalPrice = form.originalPricePaise,
             )
         ) { select() }.decodeSingle<Dish>().id
 
@@ -68,6 +68,7 @@ class MenuRepository(private val sb: SupabaseClient, private val restaurantId: S
             set("description", form.description.trim().ifBlank { null })
             set("image_url", imageUrl)
             set("base_price", form.pricePaise)
+            set("original_price", form.originalPricePaise)
             set("is_veg", form.isVeg)
             set("stock_qty", form.stockQty)
             set("name_i18n", form.nameI18n)
@@ -85,9 +86,9 @@ class MenuRepository(private val sb: SupabaseClient, private val restaurantId: S
     }
 
     /** Replaces all variants of a dish (name, price in paise). */
-    suspend fun saveVariants(dishId: String, variants: List<Pair<String, Int>>) {
+    suspend fun saveVariants(dishId: String, variants: List<Triple<String, Int, Int?>>) {
         sb.from("dish_variants").delete { filter { eq("dish_id", dishId) } }
-        if (variants.isNotEmpty()) sb.from("dish_variants").insert(variants.map { (n, p) -> NewVariant(restaurantId, dishId, n.trim(), p) })
+        if (variants.isNotEmpty()) sb.from("dish_variants").insert(variants.map { (n, p, original) -> NewVariant(restaurantId, dishId, n.trim(), p, original) })
     }
 
     suspend fun setDishGroups(dishId: String, groupIds: Set<String>) {
@@ -125,22 +126,90 @@ class MenuRepository(private val sb: SupabaseClient, private val restaurantId: S
 
     suspend fun deleteOffer(id: String) { sb.from("offers").delete { filter { eq("id", id) } } }
 
-    /** Creates missing categories (by name) and all the dishes. Returns how many dishes were added. */
+    /** Creates missing categories (by name), dishes, and size rows. Returns dishes added. */
     suspend fun importDishes(rows: List<CsvDish>): Int {
         val existing = categories().associateBy { it.name.trim().lowercase() }.toMutableMap()
-        val missing = rows.map { it.category.trim() }.filter { it.isNotBlank() && it.lowercase() !in existing }.distinctBy { it.lowercase() }
+        val categoryData = rows.groupBy { it.category.trim().lowercase() }.mapValues { (_, categoryRows) ->
+            require(categoryRows.map { it.category.trim() }.distinct().size == 1) { "CSV category spellings must match exactly." }
+            val kinds = categoryRows.mapNotNull { it.categoryKind }.distinct()
+            require(kinds.size <= 1) { "Category rows specify conflicting category_kind values." }
+            val translations = categoryRows.flatMap { it.categoryI18n.entries }
+                .groupBy({ it.key }, { it.value }).mapValues { (_, values) ->
+                    require(values.distinct().size == 1) { "Category rows specify conflicting translated names." }
+                    values.first()
+                }
+            kinds.singleOrNull() to translations
+        }
+        val missing = rows.filter { it.category.trim().isNotBlank() && it.category.trim().lowercase() !in existing }
+            .distinctBy { it.category.trim().lowercase() }
         if (missing.isNotEmpty()) {
             val base = existing.size
-            val created = sb.from("categories").insert(missing.mapIndexed { i, n -> NewCategory(restaurantId, n, "food", base + i) }) { select() }.decodeList<Category>()
+            val created = sb.from("categories").insert(missing.mapIndexed { i, row ->
+                val (kind, translations) = categoryData.getValue(row.category.trim().lowercase())
+                NewCategory(restaurantId, row.category.trim(), kind ?: "food", base + i, translations.takeIf { it.isNotEmpty() })
+            }) { select() }.decodeList<Category>()
             created.forEach { existing[it.name.trim().lowercase()] = it }
         }
-        val dishes = rows.mapNotNull { r ->
-            val cat = existing[r.category.trim().lowercase()] ?: return@mapNotNull null
-            NewDish(restaurantId, cat.id, r.name.trim(), r.description.trim().ifBlank { null }, null, r.pricePaise, r.isVeg)
+        categoryData.forEach { (key, info) ->
+            val (kind, translations) = info
+            if (translations.isNotEmpty() || kind != null) existing[key]?.let { category ->
+                sb.from("categories").update({
+                    if (translations.isNotEmpty()) set("name_i18n", category.nameI18n.orEmpty() + translations)
+                    kind?.let { set("kind", it) }
+                }) { filter { eq("id", category.id) } }
+            }
         }
-        if (dishes.isNotEmpty()) sb.from("dishes").insert(dishes)
+        val variantsByDish = rows.filter { !it.variantName.isNullOrBlank() }
+            .groupBy { "${it.category.trim().lowercase()}\u001f${it.name.trim().lowercase()}" }
+        val plainRows = rows.filter { it.variantName.isNullOrBlank() }
+        require(plainRows.none { "${it.category.trim().lowercase()}\u001f${it.name.trim().lowercase()}" in variantsByDish }) {
+            "A dish cannot mix a plain row with variant rows."
+        }
+        val dishRows = plainRows.map { listOf(it) } + variantsByDish.values
+        dishRows.forEach { group ->
+            require(group.map { it.category.trim() }.distinct().size == 1 && group.map { it.name.trim() }.distinct().size == 1 &&
+                group.map { it.categoryI18n }.distinct().size == 1 && group.map { it.categoryKind }.distinct().size == 1 &&
+                group.map { listOf(it.pricePaise, it.originalPricePaise, it.isVeg, it.description, it.nameI18n, it.descriptionI18n) }.distinct().size == 1) {
+                "Repeated dish rows must repeat the same category, names, descriptions, selling price, original price and vegetarian status."
+            }
+            require(group.filter { !it.variantName.isNullOrBlank() }.map { it.variantName!!.trim().lowercase() }.distinct().size == group.count { !it.variantName.isNullOrBlank() }) {
+                "Variant names must be unique within a dish."
+            }
+            group
+        }
+        val dishes = dishRows.map { group ->
+            val r = group.first()
+            val cat = existing[r.category.trim().lowercase()] ?: error("Missing category: ${r.category}")
+            NewDish(
+                restaurantId, cat.id, r.name.trim(), r.description.trim().ifBlank { null }, null, r.pricePaise, r.isVeg,
+                nameI18n = r.nameI18n.takeIf { it.isNotEmpty() },
+                descriptionI18n = r.descriptionI18n.takeIf { it.isNotEmpty() },
+                originalPrice = r.originalPricePaise,
+            )
+        }
+        val createdDishes = if (dishes.isNotEmpty()) {
+            sb.from("dishes").insert(dishes) { select(Columns.list("id,category_id,name")) }.decodeList<ImportedDishRef>()
+        } else emptyList()
+        val variantRows = dishRows.flatMapIndexed { index, group ->
+            group.filter { !it.variantName.isNullOrBlank() }.map { Triple(index, it.variantName!!.trim(), it.variantPricePaise!! to it.variantOriginalPricePaise) }
+        }
+        if (variantRows.isNotEmpty()) {
+            val idByKey = createdDishes.associateBy { "${it.categoryId}\u001f${it.name.trim().lowercase()}" }
+            variantRows.groupBy { it.first }.forEach { (index, variants) ->
+                val row = dishRows[index].first()
+                val category = existing.getValue(row.category.trim().lowercase())
+                val dishId = idByKey["${category.id}\u001f${row.name.trim().lowercase()}"]?.id
+                    ?: error("Imported dish not found: ${row.name}")
+                saveVariants(dishId, variants.map { (_, name, priceAndOriginal) ->
+                    Triple(name, priceAndOriginal.first, priceAndOriginal.second)
+                })
+            }
+        }
         return dishes.size
     }
+
+    @kotlinx.serialization.Serializable
+    private data class ImportedDishRef(@kotlinx.serialization.SerialName("category_id") val categoryId: String, val name: String, val id: String)
 
     /** Uploads to dish-images/<restaurant_id>/<uuid>.jpg (storage policy only allows your own folder). */
     suspend fun uploadImage(bytes: ByteArray): String {

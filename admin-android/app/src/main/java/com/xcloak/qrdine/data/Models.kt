@@ -42,6 +42,7 @@ data class NewCategory(
     val name: String,
     val kind: String,
     val sort: Int,
+    @SerialName("name_i18n") val nameI18n: Map<String, String>? = null,
 )
 
 @Serializable
@@ -53,6 +54,7 @@ data class Dish(
     val description: String? = null,
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("base_price") val basePrice: Int,
+    @SerialName("original_price") val originalPrice: Int? = null,
     @SerialName("is_veg") val isVeg: Boolean = true,
     @SerialName("is_available") val isAvailable: Boolean = true,
     val sort: Int = 0,
@@ -74,6 +76,7 @@ data class NewDish(
     @SerialName("stock_qty") val stockQty: Int? = null,
     @SerialName("name_i18n") val nameI18n: Map<String, String>? = null,
     @SerialName("description_i18n") val descriptionI18n: Map<String, String>? = null,
+    @SerialName("original_price") val originalPrice: Int? = null,
 )
 
 /** What the editor screen collects. Price is in paise. */
@@ -86,6 +89,23 @@ data class DishForm(
     val stockQty: Int? = null,
     val nameI18n: Map<String, String>? = null,
     val descI18n: Map<String, String>? = null,
+    val originalPricePaise: Int? = null,
+)
+
+data class CsvDish(
+    val category: String,
+    val categoryKind: String?,
+    val categoryI18n: Map<String, String>,
+    val name: String,
+    val nameI18n: Map<String, String>,
+    val pricePaise: Int,
+    val originalPricePaise: Int?,
+    val isVeg: Boolean,
+    val description: String,
+    val descriptionI18n: Map<String, String>,
+    val variantName: String?,
+    val variantPricePaise: Int?,
+    val variantOriginalPricePaise: Int?,
 )
 
 @Serializable
@@ -396,6 +416,7 @@ data class AdminResult(
 @Serializable
 data class DishVariant(
     val id: String, @SerialName("dish_id") val dishId: String, val name: String, val price: Int,
+    @SerialName("original_price") val originalPrice: Int? = null,
 )
 
 @Serializable
@@ -475,7 +496,7 @@ data class HotelView(
     @SerialName("recent_bills") val recentBills: List<RecentBill> = emptyList(),
 )
 
-@Serializable data class NewVariant(@SerialName("restaurant_id") val restaurantId: String, @SerialName("dish_id") val dishId: String, val name: String, val price: Int)
+@Serializable data class NewVariant(@SerialName("restaurant_id") val restaurantId: String, @SerialName("dish_id") val dishId: String, val name: String, val price: Int, @SerialName("original_price") val originalPrice: Int? = null)
 @Serializable data class NewLink(@SerialName("restaurant_id") val restaurantId: String, @SerialName("dish_id") val dishId: String, @SerialName("group_id") val groupId: String)
 @Serializable data class NewGroup(@SerialName("restaurant_id") val restaurantId: String, val name: String, @SerialName("min_select") val minSelect: Int, @SerialName("max_select") val maxSelect: Int)
 @Serializable data class NewAddon(@SerialName("restaurant_id") val restaurantId: String, @SerialName("group_id") val groupId: String, val name: String, val price: Int)

@@ -31,7 +31,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,14 +44,14 @@ enum class AppThemeMode(val label: String) {
     SYSTEM("System"), LIGHT("Light"), DARK("Dark");
 
     companion object {
-        fun fromStored(value: String?): AppThemeMode = entries.firstOrNull { it.name == value } ?: SYSTEM
+        fun fromStored(value: String?): AppThemeMode = entries.firstOrNull { it.name == value } ?: DARK
     }
 }
 
 object AppThemePreference {
     private const val PREFS = "qrdine_preferences"
     private const val MODE_KEY = "theme_mode"
-    private val _mode = MutableStateFlow(AppThemeMode.SYSTEM)
+    private val _mode = MutableStateFlow(AppThemeMode.DARK)
     val mode: StateFlow<AppThemeMode> = _mode.asStateFlow()
 
     fun initialize(context: Context) {
@@ -65,50 +67,66 @@ object AppThemePreference {
 }
 
 private val Light = lightColorScheme(
-    primary = Color(0xFF3659C9), onPrimary = Color.White,
-    primaryContainer = Color(0xFFE0E7FF), onPrimaryContainer = Color(0xFF111C4B),
-    secondary = Color(0xFF52627A), secondaryContainer = Color(0xFFE3E9F3), onSecondaryContainer = Color(0xFF18263B),
-    tertiary = Color(0xFF9A571D), tertiaryContainer = Color(0xFFFFDFC4), onTertiaryContainer = Color(0xFF341900),
-    background = Color(0xFFF5F7FC), surface = Color(0xFFFAFBFF),
-    surfaceVariant = Color(0xFFE6E9F2), onSurfaceVariant = Color(0xFF454B5B),
+    primary = Color(0xFF006B59), onPrimary = Color.White,
+    primaryContainer = Color(0xFFB5F1DF), onPrimaryContainer = Color(0xFF002019),
+    secondary = Color(0xFF4C655D), onSecondary = Color.White,
+    secondaryContainer = Color(0xFFD7E9E1), onSecondaryContainer = Color(0xFF10261F),
+    tertiary = Color(0xFF8A5B00), onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFFFDEA0), onTertiaryContainer = Color(0xFF2A1B00),
+    background = Color(0xFFF1F7F3), surface = Color(0xFFF8FCF9),
+    surfaceVariant = Color(0xFFDCE9E2), onSurfaceVariant = Color(0xFF40574E),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF0F2F9),
-    surfaceContainer = Color(0xFFEAEFF8),
-    surfaceContainerHigh = Color(0xFFE5EAF4),
-    surfaceContainerHighest = Color(0xFFDEE5F1),
-    outline = Color(0xFF777F90), outlineVariant = Color(0xFFC6CBD7),
+    surfaceContainerLow = Color(0xFFEAF3ED),
+    surfaceContainer = Color(0xFFE3EEE7),
+    surfaceContainerHigh = Color(0xFFDDE9E2),
+    surfaceContainerHighest = Color(0xFFD5E3DA),
+    outline = Color(0xFF70877C), outlineVariant = Color(0xFFBDCEC4),
     error = Color(0xFFBA1A1A), errorContainer = Color(0xFFFFDAD6), onErrorContainer = Color(0xFF410002),
 )
 
 private val Dark = darkColorScheme(
-    primary = Color(0xFFB4C3FF), onPrimary = Color(0xFF172D8A),
-    primaryContainer = Color(0xFF2945AB), onPrimaryContainer = Color(0xFFE0E7FF),
-    secondary = Color(0xFFBBC7DD), secondaryContainer = Color(0xFF39465C), onSecondaryContainer = Color(0xFFDDE5F5),
-    tertiary = Color(0xFFFFB77E), tertiaryContainer = Color(0xFF713B0A), onTertiaryContainer = Color(0xFFFFDFC4),
-    background = Color(0xFF111521), surface = Color(0xFF151A28),
-    surfaceVariant = Color(0xFF303647), onSurfaceVariant = Color(0xFFC2C8D7),
-    surfaceContainerLowest = Color(0xFF0D111B),
-    surfaceContainerLow = Color(0xFF1A2030),
-    surfaceContainer = Color(0xFF202738),
-    surfaceContainerHigh = Color(0xFF293044),
-    surfaceContainerHighest = Color(0xFF333B50),
-    outline = Color(0xFF8C93A5), outlineVariant = Color(0xFF41495C),
+    primary = Color(0xFF64DCC0), onPrimary = Color(0xFF00382E),
+    primaryContainer = Color(0xFF005144), onPrimaryContainer = Color(0xFFB9F4E3),
+    secondary = Color(0xFFB2CDC2), onSecondary = Color(0xFF1D352D),
+    secondaryContainer = Color(0xFF354E45), onSecondaryContainer = Color(0xFFD0E8DD),
+    tertiary = Color(0xFFF2C56D), onTertiary = Color(0xFF422C00),
+    tertiaryContainer = Color(0xFF5E430A), onTertiaryContainer = Color(0xFFFFDEA0),
+    background = Color(0xFF071B16), surface = Color(0xFF0B211B),
+    surfaceVariant = Color(0xFF243B33), onSurfaceVariant = Color(0xFFBDCEC5),
+    surfaceContainerLowest = Color(0xFF061611),
+    surfaceContainerLow = Color(0xFF102820),
+    surfaceContainer = Color(0xFF143129),
+    surfaceContainerHigh = Color(0xFF193A30),
+    surfaceContainerHighest = Color(0xFF22483B),
+    outline = Color(0xFF82988D), outlineVariant = Color(0xFF3A564A),
     error = Color(0xFFFFB4AB), errorContainer = Color(0xFF93000A), onErrorContainer = Color(0xFFFFDAD6),
 )
 
 private val Shape = Shapes(
-    extraSmall = RoundedCornerShape(6.dp), small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp), extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(18.dp), medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(24.dp), extraLarge = RoundedCornerShape(30.dp),
 )
 
 private val base = Typography()
+private fun androidx.compose.ui.text.TextStyle.brand(weight: FontWeight = fontWeight ?: FontWeight.Normal) =
+    copy(fontFamily = FontFamily.SansSerif, fontWeight = weight)
+
 private val Type = base.copy(
-    headlineLarge = base.headlineLarge.copy(fontWeight = FontWeight.Bold),
-    headlineMedium = base.headlineMedium.copy(fontWeight = FontWeight.Bold),
-    headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.Bold),
-    titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-    titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-    labelLarge = base.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+    displayLarge = base.displayLarge.brand(FontWeight.Bold),
+    displayMedium = base.displayMedium.brand(FontWeight.Bold),
+    displaySmall = base.displaySmall.brand(FontWeight.Bold),
+    headlineLarge = base.headlineLarge.brand(FontWeight.Bold),
+    headlineMedium = base.headlineMedium.brand(FontWeight.Bold),
+    headlineSmall = base.headlineSmall.brand(FontWeight.Bold),
+    titleLarge = base.titleLarge.brand(FontWeight.SemiBold),
+    titleMedium = base.titleMedium.brand(FontWeight.SemiBold),
+    titleSmall = base.titleSmall.brand(FontWeight.SemiBold),
+    bodyLarge = base.bodyLarge.brand(),
+    bodyMedium = base.bodyMedium.brand(),
+    bodySmall = base.bodySmall.brand(),
+    labelLarge = base.labelLarge.brand(FontWeight.SemiBold),
+    labelMedium = base.labelMedium.brand(FontWeight.SemiBold).copy(letterSpacing = 0.3.sp),
+    labelSmall = base.labelSmall.brand(FontWeight.Medium).copy(letterSpacing = 0.2.sp),
 )
 
 @Composable
@@ -127,12 +145,12 @@ fun GlassBackdrop(content: @Composable BoxScope.() -> Unit) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Brush.radialGradient(listOf(scheme.primary.copy(alpha = 0.11f), Color.Transparent), radius = 1050f)),
+                .background(Brush.radialGradient(listOf(scheme.primary.copy(alpha = 0.10f), Color.Transparent), radius = 1050f)),
         )
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Brush.radialGradient(listOf(scheme.tertiary.copy(alpha = 0.08f), Color.Transparent), radius = 900f)),
+                .background(Brush.radialGradient(listOf(scheme.tertiary.copy(alpha = 0.06f), Color.Transparent), radius = 900f)),
         )
         content()
     }

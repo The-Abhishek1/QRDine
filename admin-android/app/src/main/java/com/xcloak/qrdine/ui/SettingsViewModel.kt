@@ -39,7 +39,7 @@ class SettingsViewModel(private val restaurantId: String) : ViewModel() {
             try {
                 _state.update {
                     it.copy(
-                        loading = false, restaurant = repo.restaurant(restaurantId), coupons = repo.coupons(),
+                        loading = false, restaurant = repo.restaurant(restaurantId), coupons = repo.coupons(restaurantId),
                         announcement = repo.todayAnnouncement()?.text.orEmpty(), email = repo.email(),
                     )
                 }
@@ -100,7 +100,16 @@ class SettingsViewModel(private val restaurantId: String) : ViewModel() {
     fun addCoupon(code: String, type: String, value: Int, minBillPaise: Int, maxUses: Int?) =
         act("Coupon added") { repo.addCoupon(it, code, type, value, minBillPaise, maxUses) }
 
-    fun setCouponActive(c: CouponRow, active: Boolean) = act(null) { repo.setCouponActive(c.id, active) }
+    fun updateCoupon(coupon: CouponRow, code: String, type: String, value: Int, minBillPaise: Int, maxUses: Int?) =
+        act("Coupon updated") { rid -> repo.updateCoupon(rid, coupon.id, code, type, value, minBillPaise, maxUses) }
+
+    fun setCouponActive(c: CouponRow, active: Boolean) = act(null) { rid -> repo.setCouponActive(rid, c.id, active) }
+
+    fun deleteCoupon(coupon: CouponRow) = act(
+        if (coupon.usedCount > 0) "Coupon deactivated and kept for bill history" else "Coupon deleted",
+    ) { rid ->
+        if (coupon.usedCount > 0) repo.setCouponActive(rid, coupon.id, false) else repo.deleteCoupon(rid, coupon.id)
+    }
 
     fun saveAnnouncement(text: String) = act(if (text.isBlank()) "Announcement removed" else "Announcement saved") { repo.setAnnouncement(it, text) }
 

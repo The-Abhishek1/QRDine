@@ -9,7 +9,9 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -63,7 +65,7 @@ class PlatformRepository(private val sb: SupabaseClient) {
     suspend fun setDates(rid: String, trialEndsAt: String, subExpiresAt: String?) {
         sb.postgrest.rpc("platform_set_dates", buildJsonObject {
             put("p_rid", rid); put("p_trial_ends_at", trialEndsAt)
-            if (subExpiresAt != null) put("p_sub_expires_at", subExpiresAt)
+            put("p_sub_expires_at", subExpiresAt?.let(::JsonPrimitive) ?: JsonNull)
         })
     }
 

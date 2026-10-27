@@ -61,20 +61,11 @@ fun KitchenScreen(exitLabel: String, onExit: () -> Unit, vm: OrdersViewModel = v
     ) { padding ->
         if (cooking.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(
-                        modifier = Modifier.size(84.dp),
-                        shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.SoupKitchen, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(46.dp))
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Text("Nothing to cook", style = MaterialTheme.typography.headlineSmall)
-                    Text("New orders appear here with a sound.", style = MaterialTheme.typography.bodyLarge)
-                }
+                IllustratedEmptyState(
+                    "Nothing to cook",
+                    "New orders appear here with a sound.",
+                    icon = Icons.Default.SoupKitchen,
+                )
             }
         } else LazyVerticalGrid(
             GridCells.Adaptive(320.dp), Modifier.fillMaxSize().padding(padding),

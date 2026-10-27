@@ -5,7 +5,7 @@ import { rupees } from "@/lib/money";
 import { newKey } from "@/lib/uuid";
 import { type CartLine, isSimple, lineKey, parseCart, unitPrice } from "@/lib/cart";
 import { freeOfferQuantities } from "@/lib/offers";
-import { I18nContext, LANGS, makeI18n } from "@/lib/i18n";
+import { I18nContext, LANGS, makeI18n, useI18n } from "@/lib/i18n";
 import { sessionIdFromToken, subscribeSession } from "@/lib/realtime";
 import type { ActiveState, Dish, EndedState, JoinResult, Menu } from "@/lib/types";
 import MenuView from "./MenuView";
@@ -22,27 +22,27 @@ type Phase =
   | { kind: "ready" };
 
 const SERVICE_ERRORS: Record<string, string> = {
-  orders_not_served: "You can request the bill once all your dishes are served.",
-  nothing_to_bill: "There is nothing to bill yet.",
-  rate_limited: "Please wait a moment before trying again.",
-  session_closed: "This table's session has ended.",
+  orders_not_served: "billWhenServed",
+  nothing_to_bill: "nothingToBill",
+  rate_limited: "waitBeforeRetry",
+  session_closed: "sessionEnded",
 };
 
 const ORDER_ERRORS: Record<string, string> = {
-  session_closed: "This table's session has ended. Scan the QR code again to start a new order.",
-  rate_limited: "Too many orders in a short time. Wait a few minutes or call the waiter.",
-  subscription_inactive: "This restaurant isn't taking orders through the app right now. Please ask the staff.",
-  order_too_large: "That order is too large. Split it into two orders or ask the waiter.",
-  network: "No connection. Your cart is saved, so try again in a moment.",
+  session_closed: "sessionEndedQr",
+  rate_limited: "tooManyOrders",
+  subscription_inactive: "subscriptionInactive",
+  order_too_large: "orderTooLarge",
+  network: "noConnectionCart",
 };
 
 const REVIEW_ERRORS: Record<string, string> = {
-  invalid_session: "This review link has expired. Please ask the staff for help.",
-  not_paid: "Feedback is available after your bill has been paid.",
-  empty_review: "Choose a rating or write a comment before sending.",
-  rate_limited: "Please wait a moment before sending feedback again.",
-  network: "No connection. Check your internet and try again.",
-  server_error: "The restaurant could not save your feedback. Please try again later.",
+  invalid_session: "invalidReviewLink",
+  not_paid: "reviewAfterPayment",
+  empty_review: "emptyReview",
+  rate_limited: "waitBeforeFeedback",
+  network: "checkInternet",
+  server_error: "saveFeedbackError",
 };
 
 export default function TableApp({ token }: { token: string }) {
@@ -73,8 +73,9 @@ export default function TableApp({ token }: { token: string }) {
   const i18n = useMemo(() => makeI18n(lang), [lang]);
   const { t, pick } = i18n;
 
-  useEffect(() => { try { const l = localStorage.getItem("qd:lang"); if (l) setLang(l); } catch {} }, []);
-  const chooseLang = (l: string) => { setLang(l); try { localStorage.setItem("qd:lang", l); } catch {} };
+  useEffect(() => { try { const l = localStorage.getItem("qd:lang"); if (l && LANGS[l]) setLang(l); } catch {} }, []);
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  const chooseLang = (l: string) => { if (!LANGS[l]) return; setLang(l); try { localStorage.setItem("qd:lang", l); } catch {} };
 
   const clearStorage = useCallback(() => {
     try { localStorage.removeItem(gKey); localStorage.removeItem(kKey); localStorage.removeItem(cKey); } catch {}
@@ -223,10 +224,10 @@ export default function TableApp({ token }: { token: string }) {
     } catch (e) {
       const code = e instanceof ApiError ? e.code : "network";
       const detail = e instanceof ApiError ? e.detail : undefined;
-      if (code === "dish_unavailable") { setCartError(`${detail ?? "A dish"} is not available. Remove it to continue.`); void refresh(true); }
-      else if (code === "variant_required" || code === "addon_choice") { setCartError(`Please check the options for ${detail ?? "a dish"}.`); void refresh(true); }
+      if (code === "dish_unavailable") { setCartError(t("dishUnavailable", { name: detail ?? t("item") })); void refresh(true); }
+      else if (code === "variant_required" || code === "addon_choice") { setCartError(t("checkOptions", { name: detail ?? t("item") })); void refresh(true); }
       else if (code === "session_closed") { forgetSession(); setCartOpen(false); setPhase({ kind: "ended", info: null }); }
-      else setCartError(ORDER_ERRORS[code] ?? "Something went wrong. Please try again.");
+      else setCartError(t(ORDER_ERRORS[code] ?? "genericError"));
     } finally { setPlacing(false); }
   }
 
@@ -236,7 +237,7 @@ export default function TableApp({ token }: { token: string }) {
     setSvcBusy(true); setSvcNotice(null);
     try { await api.service(g, type); await refresh(); }
     catch (e) {
-      if (e instanceof ApiError && e.code !== "network") setSvcNotice(SERVICE_ERRORS[e.code] ?? "Something went wrong. Please try again.");
+      if (e instanceof ApiError && e.code !== "network") setSvcNotice(t(SERVICE_ERRORS[e.code] ?? "genericError"));
       else setOnline(false);
       void refresh();
     } finally { setSvcBusy(false); }
@@ -246,13 +247,13 @@ export default function TableApp({ token }: { token: string }) {
     const g = guest.current;
     if (!g) return null;
     try { await api.coupon(g, code); await refresh(); return null; }
-    catch (e) { return e instanceof ApiError && e.code === "coupon_invalid" ? t("couponBad") : "Could not apply the coupon. Please try again."; }
+    catch (e) { return e instanceof ApiError && e.code === "coupon_invalid" ? t("couponBad") : t("couponError"); }
   }
 
   // ---------- screens ----------
   const wrap = (node: React.ReactNode) => <I18nContext.Provider value={i18n}>{node}</I18nContext.Provider>;
 
-  if (phase.kind === "loading") return wrap(<Screen title="Opening the menu…" />);
+  if (phase.kind === "loading") return wrap(<Screen title={t("openingMenu")} />);
   if (phase.kind === "ended") {
     const info = phase.info;
     return wrap(
@@ -262,13 +263,13 @@ export default function TableApp({ token }: { token: string }) {
         canReview={!!guest.current}
         reviewed={info?.reviewed ?? false}
         onSubmit={async (r) => {
-          if (!guest.current) throw new Error(REVIEW_ERRORS.invalid_session);
+          if (!guest.current) throw new Error(t(REVIEW_ERRORS.invalid_session));
           try {
             await api.review(guest.current, r);
           } catch (e) {
             if (e instanceof ApiError && e.code === "already_reviewed") return;
             const code = e instanceof ApiError ? e.code : "network";
-            throw new Error(REVIEW_ERRORS[code] ?? `Could not send feedback (${code}). Please try again.`);
+            throw new Error(REVIEW_ERRORS[code] ? t(REVIEW_ERRORS[code]) : t("reviewError", { code }));
           }
         }}
       />,
@@ -276,23 +277,23 @@ export default function TableApp({ token }: { token: string }) {
   }
   if (phase.kind === "error") {
     return wrap(phase.code === "invalid_qr"
-      ? <Screen title="This QR code isn't valid" body="It may have been replaced. Please ask the staff for the current one." />
-      : <Screen title="Can't reach the restaurant" body="Check your connection and try again." action={{ label: "Try again", run: () => { setPhase({ kind: "loading" }); void join(); } }} />);
+      ? <Screen title={t("invalidQr")} body={t("replacedQr")} />
+      : <Screen title={t("cannotReach")} body={t("checkConnection")} action={{ label: t("tryAgain"), run: () => { setPhase({ kind: "loading" }); void join(); } }} />);
   }
   if (phase.kind === "gate") {
     const j = phase.join;
-    const head = <Header name={j.restaurant.name} table={j.table.label} logo={j.restaurant.logo_url ?? null} langs={[]} lang={lang} onLang={chooseLang} />;
+    const head = <Header name={j.restaurant.name} table={j.table.label} logo={j.restaurant.logo_url ?? null} lang={lang} onLang={chooseLang} />;
     if (j.state === "pin_required" || j.state === "pin_locked") {
       return wrap(
         <div className="shell">{head}
           <main className="screen inline">
-            <h1 className="screen-title">Enter the table code</h1>
-            <p className="screen-body">The staff will give you a 4-digit code for this table.</p>
-            {j.state === "pin_locked" ? <p className="error">Too many wrong codes. Ask the staff for help.</p> : (
+            <h1 className="screen-title">{t("enterTableCode")}</h1>
+            <p className="screen-body">{t("staffGiveCode")}</p>
+            {j.state === "pin_locked" ? <p className="error">{t("tooManyCodes")}</p> : (
               <form onSubmit={(e) => { e.preventDefault(); void join(pin); }} className="pin-form">
-                <input inputMode="numeric" pattern="[0-9]*" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} aria-label="Table code" autoFocus />
-                {j.wrong && <p className="error" role="alert">That code is wrong. Try again.</p>}
-                <button className="btn-primary" disabled={pin.length !== 4}>Continue</button>
+                <input inputMode="numeric" pattern="[0-9]*" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} aria-label={t("tableCode")} autoFocus />
+                {j.wrong && <p className="error" role="alert">{t("wrongCode")}</p>}
+                <button className="btn-primary" disabled={pin.length !== 4}>{t("continue")}</button>
               </form>
             )}
           </main>
@@ -300,26 +301,25 @@ export default function TableApp({ token }: { token: string }) {
       );
     }
     const copy: Record<string, [string, string]> = {
-      table_closed: ["This table isn't open yet", "Ask the staff to open it, then check again."],
-      shop_closed: ["Not taking orders right now", "Please ask the staff for help."],
-      unavailable: ["Ordering from the table isn't available", "Please ask the staff for a menu."],
+      table_closed: ["tableNotOpen", "askOpenTable"],
+      shop_closed: ["notTakingOrders", "askStaffHelp"],
+      unavailable: ["orderingUnavailable", "askStaffMenu"],
     };
     const [ti, bo] = copy[j.state] ?? copy.unavailable;
     return wrap(
       <div className="shell">{head}
-        <Screen inline title={ti} body={bo} action={j.state === "table_closed" ? { label: "Check again", run: () => { setPhase({ kind: "loading" }); void join(); } } : undefined} />
+        <Screen inline title={t(ti)} body={t(bo)} action={j.state === "table_closed" ? { label: t("checkAgain"), run: () => { setPhase({ kind: "loading" }); void join(); } } : undefined} />
       </div>,
     );
   }
 
   const open = session?.session_status === "bill_requested";
-  const langs = menu?.languages ?? [];
   return wrap(
     <div className="shell">
-      <Header name={restaurant} table={tableLabel} logo={logo} langs={langs} lang={lang} onLang={chooseLang} />
-      {!online && <div className="offline" role="status">Can't reach the restaurant. Retrying…</div>}
+      <Header name={restaurant} table={tableLabel} logo={logo} lang={lang} onLang={chooseLang} />
+      {!online && <div className="offline" role="status">{t("offlineRetry")}</div>}
       {menu?.announcement && <div className="announce">{menu.announcement}</div>}
-      <nav className="tabs" aria-label="Sections">
+      <nav className="tabs" aria-label={t("sections")}>
         <button className={tab === "menu" ? "on" : ""} onClick={() => setTab("menu")}>{t("menu")}</button>
         <button className={tab === "orders" ? "on" : ""} onClick={() => { setTab("orders"); void refresh(); }}>
           {t("myOrders")}{session && session.orders.length > 0 ? ` (${session.orders.length})` : ""}
@@ -351,17 +351,16 @@ export default function TableApp({ token }: { token: string }) {
   );
 }
 
-function Header({ name, table, logo, langs, lang, onLang }: { name: string; table: string; logo: string | null; langs: string[]; lang: string; onLang: (l: string) => void }) {
+function Header({ name, table, logo, lang, onLang }: { name: string; table: string; logo: string | null; lang: string; onLang: (l: string) => void }) {
+  const { t } = useI18n();
   return (
     <header className="top">
       {logo && <img className="logo" src={logo} alt="" width={40} height={40} referrerPolicy="no-referrer" />}
-      <h1>{name || "Welcome"}</h1>
-      {langs.length > 0 && (
-        <select className="langsel" aria-label="Language" value={lang} onChange={(e) => onLang(e.target.value)}>
-          {["en", ...langs].map((l) => <option key={l} value={l}>{LANGS[l] ?? l}</option>)}
-        </select>
-      )}
-      {table && <span className="table-chip" aria-label={`Table ${table}`}><small>Table</small><b>{table}</b></span>}
+      <h1>{name || t("welcome")}</h1>
+      <select className="langsel" aria-label={t("language")} value={lang} onChange={(e) => onLang(e.target.value)}>
+        {Object.keys(LANGS).map((l) => <option key={l} value={l}>{LANGS[l]}</option>)}
+      </select>
+      {table && <span className="table-chip" aria-label={`${t("table")} ${table}`}><small>{t("table")}</small><b>{table}</b></span>}
     </header>
   );
 }

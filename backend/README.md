@@ -178,3 +178,9 @@ Deploy after reviewing the diagnostics disclosure in the PWA privacy page:
 
 The Platform > Settings screen shows reports received in the last 30 days. Database test `08_diagnostics.test.sql`
 checks table existence, RLS, and client/service-role privileges. No hosted migration or function deployment is performed by the code change itself.
+
+## Original/list prices
+Migration `20261027000001_original_prices.sql` adds nullable `original_price` paise fields to dishes and
+dish variants. Existing rows remain `NULL` and keep their current sale price. A non-null original price
+must be strictly greater than its matching base or variant price. The `session-join` and `session-state`
+menu contract includes these fields; deploy the shared guest functions after applying the migration.

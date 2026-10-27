@@ -29,6 +29,12 @@ Kotlin + Jetpack Compose, supabase-kt. Package: com.xcloak.qrdine, minSdk 26.
 Email/password sign-up and sign-in, restaurant setup (create_restaurant rpc + token refresh),
 menu manager: categories (food/beverage), dishes with photo upload (compressed under 1 MB),
 veg/non-veg, price, out-of-stock switch, soft delete. Everything goes through RLS as the owner.
+The menu CSV guide can download a language-aware template and import/export category and dish
+translations, vegetarian status, base prices, and named sizes with per-size prices. Optional original
+prices are shown as sale strike-throughs and must be higher than their matching selling price.
+CSV does not model add-on groups/options, photos, stock, or availability; those remain managed
+separately in the menu editor. The schema stores a size/variant's name and price, not a numeric
+quantity (for example, "Half" and "Full" are names).
 
 ## Acceptance checks
 - Two accounts, two restaurants: neither can see the other's categories or dishes.

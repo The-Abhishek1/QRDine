@@ -6,7 +6,8 @@ import { type CartLine, isSimple, lineKey } from "@/lib/cart";
 import { useI18n } from "@/lib/i18n";
 
 function VegMark({ veg }: { veg: boolean }) {
-  return <span className={`veg ${veg ? "veg-yes" : "veg-no"}`} role="img" aria-label={veg ? "Vegetarian" : "Non-vegetarian"}><i /></span>;
+  const { t } = useI18n();
+  return <span className={`veg ${veg ? "veg-yes" : "veg-no"}`} role="img" aria-label={t(veg ? "vegetarian" : "nonVegetarian")}><i /></span>;
 }
 
 function Stepper({ qty, onAdd, onRemove, name }: { qty: number; onAdd: () => void; onRemove: () => void; name: string }) {
@@ -14,9 +15,9 @@ function Stepper({ qty, onAdd, onRemove, name }: { qty: number; onAdd: () => voi
   if (qty === 0) return <button className="btn-add" onClick={onAdd} aria-label={`${t("add")} ${name}`}>{t("add")}</button>;
   return (
     <div className="stepper" role="group" aria-label={`${name}`}>
-      <button onClick={onRemove} aria-label={`− ${name}`}>−</button>
+      <button onClick={onRemove} aria-label={`${t("remove")} ${name}`}>−</button>
       <span aria-live="polite">{qty}</span>
-      <button onClick={onAdd} aria-label={`+ ${name}`}>+</button>
+      <button onClick={onAdd} aria-label={`${t("add")} ${name}`}>+</button>
     </div>
   );
 }
@@ -55,8 +56,8 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
         </label>
       </div>
       {!!menu.offers?.length && (
-        <section className="offers" aria-label="Offers">
-          <h2>Offers</h2>
+        <section className="offers" aria-label={t("offers")}>
+          <h2>{t("offers")}</h2>
           {menu.offers.map((offer) => {
             const item = menu.dishes.find((d) => d.id === offer.buy_dish_id);
             const reward = menu.dishes.find((d) => d.id === offer.reward_dish_id);
@@ -72,7 +73,7 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
         </section>
       )}
       {groups.length > 1 && (
-        <nav className="cats" aria-label="Menu sections">
+        <nav className="cats" aria-label={t("menuSections")}>
           {groups.map(({ c }) => (
             <a key={c.id} href={`#cat-${c.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(`cat-${c.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>{pick(c.name, c.name_i18n)}</a>
           ))}
@@ -92,13 +93,15 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
               const qty = simple
                 ? (lines.find((l) => l.key === lineKey(d.id, null, [], ""))?.qty ?? 0)
                 : lines.filter((l) => l.dishId === d.id).reduce((n, l) => n + l.qty, 0);
-              const from = d.variants.length ? Math.min(...d.variants.map((v) => v.price)) : d.base_price;
+              const fromVariant = [...d.variants].sort((a, b) => a.price - b.price)[0];
+              const from = fromVariant?.price ?? d.base_price;
+              const original = fromVariant ? fromVariant.original_price : d.original_price;
               const desc = pick(d.description ?? "", d.description_i18n);
               return (
                 <li key={d.id} className={`dish ${orderable ? "" : "dish-out"}`}>
                   <div className="dish-text">
                     <div className="dish-name"><VegMark veg={d.is_veg} /><span>{pick(d.name, d.name_i18n)}</span></div>
-                    <div className="dish-price">{rupees(from)}{d.variants.length > 0 ? "+" : ""}</div>
+                    <div className="dish-price"><span>{rupees(from)}{d.variants.length > 0 ? "+" : ""}</span>{original != null && original > from && <del>{rupees(original)}</del>}</div>
                     <div className="dish-tags">
                       {menu.bestsellers.includes(d.id) && <span className="tag tag-best">★ {t("bestseller")}</span>}
                       {d.stock_left !== null && d.stock_left > 0 && d.stock_left <= 5 && <span className="tag tag-low">{t("onlyLeft", { n: d.stock_left })}</span>}

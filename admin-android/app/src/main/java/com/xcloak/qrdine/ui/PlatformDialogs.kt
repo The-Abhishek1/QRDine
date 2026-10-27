@@ -98,7 +98,9 @@ fun PaymentDialog(hotels: List<HotelRow>, fixed: HotelRow?, onDismiss: () -> Uni
                 OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' }.take(9) }, label = { Text("Amount received (₹)") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("cash" to "Cash", "upi" to "UPI", "bank" to "Bank").forEach { (k, l) -> FilterChip(method == k, { method = k }, label = { Text(l) }) }
+                    listOf("cash" to "Cash", "upi" to "UPI", "bank" to "Bank").forEach { (k, l) ->
+                        FilterChip(method == k, { method = k; if (k == "cash") ref = "" }, label = { Text(l) })
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(1, 3, 6, 12).forEach { n -> FilterChip(months == n.toString(), { months = n.toString() }, label = { Text(if (n == 1) "1 month" else "$n months") }) }
@@ -156,7 +158,7 @@ fun AddHotelDialog(onDismiss: () -> Unit, onConfirm: (String, String, String, St
                 Text("Creates the hotel's login and approves it. Share the email and password with the owner; they can change the password in Settings.", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(name, { name = it.take(120) }, label = { Text("Hotel name") }, singleLine = true)
                 OutlinedTextField(email, { email = it.trim() }, label = { Text("Owner email") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-                OutlinedTextField(password, { password = it }, label = { Text("Temporary password (8+)") }, singleLine = true)
+                OutlinedTextField(password, { password = it }, label = { Text("Temporary password (8+)") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
                 OutlinedTextField(phone, { phone = it.take(20) }, label = { Text("Phone (optional)") }, singleLine = true)
                 OutlinedTextField(address, { address = it.take(200) }, label = { Text("Address (optional)") }, singleLine = true)
                 OutlinedTextField(days, { days = it.filter(Char::isDigit).take(3) }, label = { Text("Free trial (days)") }, singleLine = true, keyboardOptions = num)

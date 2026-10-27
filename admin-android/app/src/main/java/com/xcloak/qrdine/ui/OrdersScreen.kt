@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.TableRestaurant
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -95,7 +97,7 @@ fun OrdersScreen(bottomBar: @Composable () -> Unit, onOpenBill: (String, String)
 
             if (tab == 0) {
                 if (snap.loaded && action == 0) {
-                    EmptyState("No orders right now", "New orders appear here with a loud alert.")
+                    EmptyState("No orders right now", "New orders appear here with a loud alert.", Icons.Default.Restaurant)
                 } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (snap.attention > 0) item { Text("Needs you now (${snap.attention})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                     items(snap.requests, key = { "r-${it.req.id}" }) { r ->
@@ -118,7 +120,7 @@ fun OrdersScreen(bottomBar: @Composable () -> Unit, onOpenBill: (String, String)
                 }
             } else {
                 if (snap.loaded && snap.serving.isEmpty()) {
-                    EmptyState("No tables in service", "Open a table on the Tables tab. Served orders stay here, with the running bill, until you mark the bill paid.")
+                    EmptyState("No tables in service", "Open a table on the Tables tab. Served orders stay here, with the running bill, until you mark the bill paid.", Icons.Default.TableRestaurant)
                 } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(snap.serving, key = { it.sessionId }) { s -> ServingCard(s, tick) { onOpenBill(s.sessionId, s.table) } }
                 }
@@ -173,12 +175,9 @@ fun OrdersScreen(bottomBar: @Composable () -> Unit, onOpenBill: (String, String)
 }
 
 @Composable
-private fun EmptyState(title: String, body: String) {
+private fun EmptyState(title: String, body: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
     Box(Modifier.fillMaxSize(), Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(body, style = MaterialTheme.typography.bodyMedium)
-        }
+        IllustratedEmptyState(title, body, icon = icon)
     }
 }
 

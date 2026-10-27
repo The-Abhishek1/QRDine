@@ -287,6 +287,8 @@ private fun OrderingPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel) {
 private fun OffersPage(announcement: String, coupons: List<CouponRow>, busy: Boolean, vm: SettingsViewModel) {
     var text by remember(announcement) { mutableStateOf(announcement) }
     var showAdd by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<CouponRow?>(null) }
+    var deleting by remember { mutableStateOf<CouponRow?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Today's announcement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         OutlinedTextField(text, { text = it.take(300) }, label = { Text("Shown at the top of the menu today") }, minLines = 2, modifier = Modifier.fillMaxWidth(),
@@ -304,57 +306,112 @@ private fun OffersPage(announcement: String, coupons: List<CouponRow>, busy: Boo
         if (coupons.isEmpty()) Text("No coupons yet.")
         coupons.forEach { c ->
             Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(c.code, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            (if (c.type == "percent") "${c.value}% off" else "${c.value.toLong().rupees()} off") +
-                                (if (c.minBill > 0) " · min bill ${c.minBill.toLong().rupees()}" else "") +
-                                " · used ${c.usedCount}" + (c.maxUses?.let { " of $it" } ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(c.code, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                (if (c.type == "percent") "${c.value}% off" else "${c.value.toLong().rupees()} off") +
+                                    (if (c.minBill > 0) " · min bill ${c.minBill.toLong().rupees()}" else "") +
+                                    " · used ${c.usedCount}" + (c.maxUses?.let { " of $it" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            if (!c.active) Text("Inactive", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        }
+                        Switch(c.active, { vm.setCouponActive(c, it) }, enabled = !busy)
                     }
-                    Switch(c.active, { vm.setCouponActive(c, it) }, enabled = !busy)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { editing = c }, enabled = !busy) { Text("Edit") }
+                        TextButton(onClick = { deleting = c }, enabled = !busy) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    }
                 }
             }
         }
     }
-    if (showAdd) {
-        var code by remember { mutableStateOf("") }
-        var type by remember { mutableStateOf("percent") }
-        var value by remember { mutableStateOf("") }
-        var minBill by remember { mutableStateOf("") }
-        var maxUses by remember { mutableStateOf("") }
-        val v = value.toIntOrNull()
-        val valid = code.length >= 3 && v != null && v > 0 && (type != "percent" || v <= 100)
-        AlertDialog(
-            onDismissRequest = { showAdd = false },
-            title = { Text("New coupon") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(code, { code = it.uppercase().filter(Char::isLetterOrDigit).take(20) }, label = { Text("Code (e.g. SAVE10)") }, singleLine = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(type == "percent", { type = "percent" }, label = { Text("Percent off") })
-                        FilterChip(type == "flat", { type = "flat" }, label = { Text("₹ off") })
-                    }
-                    OutlinedTextField(value, { value = it.filter(Char::isDigit).take(6) }, label = { Text(if (type == "percent") "Percent (1 to 100)" else "Amount in ₹") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    OutlinedTextField(minBill, { minBill = it.filter(Char::isDigit).take(6) }, label = { Text("Minimum bill in ₹ (optional)") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    OutlinedTextField(maxUses, { maxUses = it.filter(Char::isDigit).take(5) }, label = { Text("Max uses (optional)") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                }
+    if (showAdd || editing != null) {
+        CouponEditorDialog(
+            coupon = editing,
+            onDismiss = { showAdd = false; editing = null },
+            onSave = { code, type, value, minBill, maxUses ->
+                val amount = if (type == "percent") value else value * 100
+                val minimum = minBill * 100
+                if (editing == null) vm.addCoupon(code, type, amount, minimum, maxUses)
+                else vm.updateCoupon(editing!!, code, type, amount, minimum, maxUses)
+                showAdd = false
+                editing = null
             },
-            confirmButton = {
-                TextButton(enabled = valid, onClick = {
-                    val amount = if (type == "percent") v!! else v!! * 100          // flat coupons are stored in paise
-                    vm.addCoupon(code, type, amount, (minBill.toIntOrNull() ?: 0) * 100, maxUses.toIntOrNull())
-                    showAdd = false
-                }) { Text("Add") }
-            },
-            dismissButton = { TextButton({ showAdd = false }) { Text("Cancel") } },
         )
     }
+    deleting?.let { coupon ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete ${coupon.code}?") },
+            text = {
+                Text(
+                    if (coupon.usedCount > 0) {
+                        "This coupon has been used. It will be deactivated and kept for bill history."
+                    } else {
+                        "This coupon has not been used and will be permanently deleted."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteCoupon(coupon); deleting = null }) {
+                    Text(if (coupon.usedCount > 0) "Deactivate" else "Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
+private fun CouponEditorDialog(coupon: CouponRow?, onDismiss: () -> Unit, onSave: (String, String, Int, Int, Int?) -> Unit) {
+    var code by remember(coupon?.id) { mutableStateOf(coupon?.code.orEmpty()) }
+    var type by remember(coupon?.id) { mutableStateOf(coupon?.type ?: "percent") }
+    var value by remember(coupon?.id) {
+        mutableStateOf(
+            when {
+                coupon == null -> ""
+                coupon.type == "percent" -> coupon.value.toString()
+                else -> (coupon.value / 100).toString()
+            },
+        )
+    }
+    var minBill by remember(coupon?.id) { mutableStateOf(coupon?.minBill?.div(100)?.takeIf { it > 0 }?.toString().orEmpty()) }
+    var maxUses by remember(coupon?.id) { mutableStateOf(coupon?.maxUses?.toString().orEmpty()) }
+    val amount = value.toIntOrNull()
+    val valid = code.length >= 3 && amount != null && amount > 0 && (type != "percent" || amount <= 100)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (coupon == null) "New coupon" else "Edit coupon") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(code, { code = it.uppercase().filter(Char::isLetterOrDigit).take(20) }, label = { Text("Code (e.g. SAVE10)") }, singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(type == "percent", { type = "percent" }, label = { Text("Percent off") })
+                    FilterChip(type == "flat", { type = "flat" }, label = { Text("₹ off") })
+                }
+                OutlinedTextField(value, { value = it.filter(Char::isDigit).take(6) }, label = { Text(if (type == "percent") "Percent (1 to 100)" else "Amount in ₹") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                OutlinedTextField(minBill, { minBill = it.filter(Char::isDigit).take(6) }, label = { Text("Minimum bill in ₹ (optional)") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                OutlinedTextField(maxUses, { maxUses = it.filter(Char::isDigit).take(5) }, label = { Text("Max uses (optional)") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = valid,
+                onClick = { onSave(code, type, amount!!, minBill.toIntOrNull() ?: 0, maxUses.toIntOrNull()) },
+            ) { Text(if (coupon == null) "Add" else "Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

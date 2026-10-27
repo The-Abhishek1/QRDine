@@ -131,14 +131,29 @@ class OwnerRepository(private val sb: SupabaseClient) {
     }
 
     // ---- offers
-    suspend fun coupons(): List<CouponRow> = sb.from("coupons").select().decodeList<CouponRow>().sortedBy { it.code }
+    suspend fun coupons(restaurantId: String): List<CouponRow> =
+        sb.from("coupons").select { filter { eq("restaurant_id", restaurantId) } }.decodeList<CouponRow>().sortedBy { it.code }
 
     suspend fun addCoupon(restaurantId: String, code: String, type: String, value: Int, minBillPaise: Int, maxUses: Int?) {
         sb.from("coupons").insert(NewCoupon(restaurantId, code.trim().uppercase(), type, value, minBillPaise, maxUses))
     }
 
-    suspend fun setCouponActive(id: String, active: Boolean) {
-        sb.from("coupons").update({ set("active", active) }) { filter { eq("id", id) } }
+    suspend fun updateCoupon(restaurantId: String, id: String, code: String, type: String, value: Int, minBillPaise: Int, maxUses: Int?) {
+        sb.from("coupons").update({
+            set("code", code.trim().uppercase())
+            set("type", type)
+            set("value", value)
+            set("min_bill", minBillPaise)
+            set("max_uses", maxUses)
+        }) { filter { eq("id", id); eq("restaurant_id", restaurantId) } }
+    }
+
+    suspend fun setCouponActive(restaurantId: String, id: String, active: Boolean) {
+        sb.from("coupons").update({ set("active", active) }) { filter { eq("id", id); eq("restaurant_id", restaurantId) } }
+    }
+
+    suspend fun deleteCoupon(restaurantId: String, id: String) {
+        sb.from("coupons").delete { filter { eq("id", id); eq("restaurant_id", restaurantId) } }
     }
 
     private fun today(): String = LocalDate.now(ist).toString()

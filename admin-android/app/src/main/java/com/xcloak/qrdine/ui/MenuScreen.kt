@@ -108,6 +108,7 @@ fun MenuHost(
     var editCategory by remember { mutableStateOf<Category?>(null) }
     var deleteFor by remember { mutableStateOf<Category?>(null) }
     var showCsvHelp by remember { mutableStateOf(false) }
+    var showCsvExportHelp by remember { mutableStateOf(false) }
     val t = target
 
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -118,6 +119,18 @@ fun MenuHost(
         } catch (e: Exception) {
             vm.reportCsvReadError(e)
         }
+    }
+    val templatePicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) runCatching {
+            val output = context.contentResolver.openOutputStream(uri) ?: error("No output stream")
+            output.use { it.write(menuCsvTemplate(s.languages).toByteArray(Charsets.UTF_8)) }
+        }.onSuccess { vm.reportCsvSaved("CSV template saved") }.onFailure { vm.reportCsvWriteError(it as? Exception ?: Exception(it)) }
+    }
+    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) runCatching {
+            val output = context.contentResolver.openOutputStream(uri) ?: error("No output stream")
+            output.use { it.write(exportMenuCsv(s).toByteArray(Charsets.UTF_8)) }
+        }.onSuccess { vm.reportCsvSaved("Menu CSV exported") }.onFailure { vm.reportCsvWriteError(it as? Exception ?: Exception(it)) }
     }
     LaunchedEffect(s.message) { s.message?.let { snackbar.showSnackbar(it); vm.messageShown() } }
 
@@ -154,6 +167,7 @@ fun MenuHost(
                         DropdownMenuItem(text = { Text("Add-on groups (extras)") }, onClick = { menuOpen = false; onAddonGroups() })
                         DropdownMenuItem(text = { Text("Reorder items") }, onClick = { menuOpen = false; reorder = true })
                         DropdownMenuItem(text = { Text("Import dishes (CSV)") }, leadingIcon = { Icon(Icons.Default.UploadFile, null) }, onClick = { menuOpen = false; showCsvHelp = true })
+                        DropdownMenuItem(text = { Text("Export menu (CSV)") }, onClick = { menuOpen = false; showCsvExportHelp = true })
                         DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuOpen = false; vm.refresh() })
                         DropdownMenuItem(text = { Text("Sign out") }, onClick = { menuOpen = false; authVm.signOut() })
                     }
@@ -267,10 +281,29 @@ fun MenuHost(
     if (showCsvHelp) {
         CsvImportGuide(
             onDismiss = { showCsvHelp = false },
+            languages = s.languages,
+            onDownloadTemplate = {
+                showCsvHelp = false
+                templatePicker.launch("qrdine-menu-template.csv")
+            },
             onChooseFile = {
                 showCsvHelp = false
                 csvPicker.launch("text/*")
             },
+        )
+    }
+    if (showCsvExportHelp) {
+        AlertDialog(
+            onDismissRequest = { showCsvExportHelp = false },
+            title = { Text("Export menu CSV?") },
+            text = { Text("The export contains categories, localized category/dish names and descriptions, vegetarian status, base and variant prices, and original prices. Add-on groups and their choices, photos, stock counts, and availability settings are not represented in this CSV and will not be exported.") },
+            confirmButton = {
+                Button(onClick = {
+                    showCsvExportHelp = false
+                    exportPicker.launch("qrdine-menu.csv")
+                }) { Text("Choose save location") }
+            },
+            dismissButton = { TextButton(onClick = { showCsvExportHelp = false }) { Text("Cancel") } },
         )
     }
 
@@ -288,8 +321,8 @@ fun MenuHost(
 }
 
 @Composable
-private fun CsvImportGuide(onDismiss: () -> Unit, onChooseFile: () -> Unit) {
-    val sample = "category,name,price,veg,description\nMains,\"Paneer Tikka, grilled\",180,y,Smoky paneer"
+private fun CsvImportGuide(onDismiss: () -> Unit, languages: List<String>, onDownloadTemplate: () -> Unit, onChooseFile: () -> Unit) {
+    val sample = menuCsvTemplate(languages).lineSequence().take(3).joinToString("\n")
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.UploadFile, null, tint = MaterialTheme.colorScheme.primary) },
@@ -299,8 +332,7 @@ private fun CsvImportGuide(onDismiss: () -> Unit, onChooseFile: () -> Unit) {
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("Use one dish per row with these columns, in this order:", style = MaterialTheme.typography.bodyMedium)
-                Text("category, name, price, veg, description", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("Download the template for the exact columns matching this restaurant's enabled languages.", style = MaterialTheme.typography.bodyMedium)
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)) {
                     Text(
                         sample,
@@ -308,15 +340,18 @@ private fun CsvImportGuide(onDismiss: () -> Unit, onChooseFile: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
                     )
                 }
-                Text("Category, dish name and price are required. Price is in rupees. Use y/n for veg; you can leave it and the description blank. A header row is okay. Put quotes around a value that contains a comma.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Import adds dishes to your menu. You can edit them afterwards.", style = MaterialTheme.typography.bodySmall)
+                Text("Each row has category, dish name, base selling price (₹), optional base original/list price, veg (y/n), description and language columns. For sizes, repeat the same dish fields on one row per size and fill variant_name, variant_price and optional variant_original_price. Size names such as Half and Full are labels; the database has no separate numeric quantity field. Every original price must be greater than its matching selling price.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("CSV supports quoted commas, escaped quotes (\"\"), and quoted line breaks. Import adds dishes and creates missing categories. Add-on groups/options are stored as separate linked records and are not represented or imported by this CSV; set them up in Extras after import.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
-            Button(onClick = onChooseFile) {
-                Icon(Icons.Default.UploadFile, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Choose CSV file")
+            Column(horizontalAlignment = Alignment.End) {
+                Button(onClick = onChooseFile) {
+                    Icon(Icons.Default.UploadFile, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Choose CSV file")
+                }
+                TextButton(onClick = onDownloadTemplate) { Text("Download CSV template") }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

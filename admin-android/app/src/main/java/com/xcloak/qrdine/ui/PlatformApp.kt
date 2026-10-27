@@ -137,7 +137,7 @@ private fun DashboardTab(
     val s = ui.summary
     val pending = ui.hotels.filter { it.state == "pending" }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenIntro("PLATFORM OVERVIEW", "SaaS dashboard", "Review applications, monitor subscriptions, and track collections.")
+        Text("Review applications, monitor subscriptions, and track collections.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Kpi("Waiting for approval", s.pending.toString(), Modifier.weight(1f)) { onFilter("pending") }
             Kpi("Ending within 7 days", s.expiringSoon.toString(), Modifier.weight(1f))
@@ -187,7 +187,7 @@ private fun HotelsTab(ui: PlatformUi, filter: String, setFilter: (String) -> Uni
     }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            ScreenIntro("CUSTOMER ACCOUNTS", "Hotels", "Search accounts, review their status, and manage access.")
+            Text("Search accounts, review their status, and manage access.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(q, { q = it }, Modifier.weight(1f), label = { Text("Search name or email") }, singleLine = true)
@@ -233,7 +233,7 @@ private fun PaymentsTab(ui: PlatformUi, onRecord: () -> Unit, onExport: (List<Pa
     val byMethod = listOf("cash" to "Cash", "upi" to "UPI", "bank" to "Bank").map { (k, l) -> l to rows.filter { it.method == k }.sumOf { it.amount } }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            ScreenIntro("REVENUE", "Payments", "Review subscription payments and issue receipts.")
+            Text("Review subscription payments and issue receipts.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(16.dp, 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("month" to "This month", "30" to "30 days", "all" to "All time").forEach { (k, l) -> FilterChip(range == k, { range = k }, label = { Text(l) }) }
@@ -284,6 +284,7 @@ private fun PlatformSettingsTab(ui: PlatformUi, vm: PlatformViewModel) {
     var bizName by remember(ui.support) { mutableStateOf(ui.support.businessName.orEmpty()) }
     var bizAddr by remember(ui.support) { mutableStateOf(ui.support.businessAddress.orEmpty()) }
     var bizGst by remember(ui.support) { mutableStateOf(ui.support.businessGstin.orEmpty()) }
+    val businessGstinValid = bizGst.isBlank() || bizGst.length == 15
     var bc by remember { mutableStateOf("") }
     var bcDays by remember { mutableStateOf("7") }
     var pw by remember { mutableStateOf("") }
@@ -291,7 +292,7 @@ private fun PlatformSettingsTab(ui: PlatformUi, vm: PlatformViewModel) {
     var confirmOut by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenIntro("PLATFORM CONTROLS", "Settings", "Keep support, receipts, and customer communications up to date.")
+        Text("Keep support, receipts, and customer communications up to date.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ThemePreferenceCard()
         GlassCard(Modifier.fillMaxWidth()) {
             Text("SIGNED IN AS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -339,8 +340,8 @@ private fun PlatformSettingsTab(ui: PlatformUi, vm: PlatformViewModel) {
             Text("Printed on payment receipts", style = MaterialTheme.typography.labelLarge)
             OutlinedTextField(bizName, { bizName = it.take(120) }, label = { Text("Your business name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(bizAddr, { bizAddr = it.take(250) }, label = { Text("Business address") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(bizGst, { bizGst = it.uppercase().filter(Char::isLetterOrDigit).take(15) }, label = { Text("GSTIN (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Button({ vm.saveSupport(phone, email, info, bizName, bizAddr, bizGst) }, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) { Text("Save details") }
+            OutlinedTextField(bizGst, { bizGst = it.uppercase().filter(Char::isLetterOrDigit).take(15) }, label = { Text("GSTIN (optional)") }, singleLine = true, isError = !businessGstinValid, supportingText = { if (!businessGstinValid) Text("Enter all 15 characters or leave this blank.") }, modifier = Modifier.fillMaxWidth())
+            Button({ vm.saveSupport(phone, email, info, bizName, bizAddr, bizGst) }, enabled = !ui.busy && businessGstinValid, modifier = Modifier.fillMaxWidth()) { Text("Save details") }
         }
 
         GlassCard(Modifier.fillMaxWidth()) {

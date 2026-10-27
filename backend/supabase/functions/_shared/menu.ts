@@ -16,11 +16,11 @@ export async function loadMenu(db: SupabaseClient, restaurantId: string) {
   const [cats, dishes, ann, rest, vars, groups, addons, links, ins, offers] = await Promise.all([
     db.from("categories").select("id,name,kind,sort,name_i18n,avail_from,avail_to")
       .eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort").order("name"),
-    db.from("dishes").select("id,category_id,name,description,image_url,base_price,is_veg,is_available,sort,name_i18n,description_i18n,stock_qty")
+    db.from("dishes").select("id,category_id,name,description,image_url,base_price,original_price,is_veg,is_available,sort,name_i18n,description_i18n,stock_qty")
       .eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort").order("name"),
     db.from("announcements").select("text").eq("restaurant_id", restaurantId).eq("show_date", today()).order("id", { ascending: false }).limit(1),
     db.from("restaurants").select("languages").eq("id", restaurantId).single(),
-    db.from("dish_variants").select("id,dish_id,name,price").eq("restaurant_id", restaurantId),
+    db.from("dish_variants").select("id,dish_id,name,price,original_price").eq("restaurant_id", restaurantId),
     db.from("addon_groups").select("id,name,min_select,max_select").eq("restaurant_id", restaurantId),
     db.from("addons").select("id,group_id,name,price,is_available").eq("restaurant_id", restaurantId),
     db.from("dish_addon_groups").select("dish_id,group_id").eq("restaurant_id", restaurantId),
@@ -37,11 +37,11 @@ export async function loadMenu(db: SupabaseClient, restaurantId: string) {
   const groupsByDish = new Map<string, unknown[]>();
   for (const l of links.data ?? []) { const g = groupById.get(l.group_id); if (g) groupsByDish.set(l.dish_id, [...(groupsByDish.get(l.dish_id) ?? []), g]); }
   const varsByDish = new Map<string, unknown[]>();
-  for (const v of (vars.data ?? []).sort((a, b) => a.price - b.price)) varsByDish.set(v.dish_id, [...(varsByDish.get(v.dish_id) ?? []), { id: v.id, name: v.name, price: v.price }]);
+  for (const v of (vars.data ?? []).sort((a, b) => a.price - b.price)) varsByDish.set(v.dish_id, [...(varsByDish.get(v.dish_id) ?? []), { id: v.id, name: v.name, price: v.price, original_price: v.original_price }]);
 
   const categories = (cats.data ?? []).map((c) => ({ id: c.id, name: c.name, kind: c.kind, sort: c.sort, name_i18n: c.name_i18n, avail_from: c.avail_from, avail_to: c.avail_to, open_now: openNow(c.avail_from, c.avail_to) }));
   const dishList = (dishes.data ?? []).map((d) => ({
-    id: d.id, category_id: d.category_id, name: d.name, description: d.description, image_url: d.image_url, base_price: d.base_price,
+    id: d.id, category_id: d.category_id, name: d.name, description: d.description, image_url: d.image_url, base_price: d.base_price, original_price: d.original_price,
     is_veg: d.is_veg, is_available: d.is_available, sort: d.sort, name_i18n: d.name_i18n, description_i18n: d.description_i18n,
     stock_left: d.stock_qty, variants: varsByDish.get(d.id) ?? [], addon_groups: groupsByDish.get(d.id) ?? [],
   }));
