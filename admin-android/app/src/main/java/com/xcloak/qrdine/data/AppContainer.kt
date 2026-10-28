@@ -28,6 +28,7 @@ class AppContainer {
     val auth = AuthRepository(supabase)
     val orders = OrdersRepository(supabase)
     val owner = OwnerRepository(supabase)
+    val customer = CustomerRepository(supabase)
     val platform = PlatformRepository(supabase)
     val ordersStore = OrdersStore(orders, supabase, QrDineApp.appScope)
 }

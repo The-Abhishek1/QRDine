@@ -16,7 +16,7 @@ export function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
 
-/** Service-role client: bypasses RLS. Only ever used after the caller's token has been verified. */
+/** Service-role client bypasses RLS; callers must authorize access or expose only intended public data. */
 export function admin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
     auth: { persistSession: false },

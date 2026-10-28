@@ -36,7 +36,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.repeatOnLifecycle
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.HotelStatus
 import com.xcloak.qrdine.notify.AlertControl
@@ -143,6 +146,18 @@ fun MainScreen(restaurantId: String, role: String) {
 
     val tabs = if (role == "owner") listOf("orders", "tables", "menu", "insights", "settings") else listOf("orders", "tables", "settings")
     val current = tabs[tab.coerceIn(0, tabs.lastIndex)]
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(current, lifecycleOwner, menuVm) {
+        if (role == "owner" && current == "menu" && menuVm != null) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                menuVm.refreshStock()
+                while (true) {
+                    delay(15_000)
+                    menuVm.refreshStock()
+                }
+            }
+        }
+    }
     val openBill: (String, String) -> Unit = { id, label -> billSession = id; billTable = label }
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val dismissSetupGuide = {

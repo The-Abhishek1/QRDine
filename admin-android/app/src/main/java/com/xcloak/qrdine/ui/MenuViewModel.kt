@@ -25,6 +25,8 @@ data class MenuUiState(
     val languages: List<String> = emptyList(),
     val message: String? = null,
     val error: String? = null,
+    val stockError: String? = null,
+    val refreshingStock: Boolean = false,
 )
 
 private fun readCsvRecords(text: String): List<List<String>> {
@@ -245,6 +247,7 @@ class MenuViewModel(private val restaurantId: String) : ViewModel() {
                     it.copy(
                         loading = false,
                         error = offersResult.exceptionOrNull()?.let(::offerLoadError),
+                        stockError = null,
                         restaurantName = rest?.name ?: it.restaurantName,
                         languages = rest?.languages ?: it.languages,
                         categories = categories,
@@ -259,6 +262,33 @@ class MenuViewModel(private val restaurantId: String) : ViewModel() {
             } catch (e: Exception) {
                 Diagnostics.record(QrDineApp.appContext, e, "menu")
                 _state.update { it.copy(loading = false, error = "Could not load the menu. Check your connection and refresh.") }
+            }
+        }
+    }
+
+    fun refreshStock() {
+        if (_state.value.refreshingStock) return
+        _state.update { it.copy(refreshingStock = true) }
+        viewModelScope.launch {
+            try {
+                val latest = repo.dishes().associateBy { it.id }
+                _state.update { state ->
+                    state.copy(
+                        dishes = state.dishes.map { dish ->
+                            latest[dish.id]?.let { dish.copy(stockQty = it.stockQty, isAvailable = it.isAvailable) } ?: dish
+                        },
+                        stockError = null,
+                        refreshingStock = false,
+                    )
+                }
+            } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "menu-stock-refresh")
+                _state.update {
+                    it.copy(
+                        stockError = "Could not refresh dish stock. Check your connection.",
+                        refreshingStock = false,
+                    )
+                }
             }
         }
     }

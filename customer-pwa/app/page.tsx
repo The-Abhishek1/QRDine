@@ -48,6 +48,7 @@ export default function Home() {
             Scan the QR code at your table to explore the menu, make it yours with extras, and send your order
             straight to the kitchen.
           </p>
+          <a className="welcome-cta" href="/explore">Order online from restaurants <span aria-hidden="true">→</span></a>
           <a className="welcome-cta" href="#how-it-works">
             See how it works <span aria-hidden="true">↓</span>
           </a>

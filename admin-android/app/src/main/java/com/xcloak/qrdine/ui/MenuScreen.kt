@@ -212,9 +212,12 @@ fun MenuHost(
                             Text("MENU TOOLS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                             Text("Customize what guests can add or save.", style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onAddonGroups, Modifier.weight(1f)) { Text("Extras · ${s.groups.size}") }
+                                OutlinedButton(onAddonGroups, Modifier.weight(1f)) {
+                                    Text("Extras\n${s.groups.size} groups · ${s.addons.count { it.isAvailable }} choices")
+                                }
                                 OutlinedButton(onOffers, Modifier.weight(1f)) { Text("Offers · ${s.offers.count { it.active }}") }
                             }
+                            s.stockError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         }
                     }
                     if (reorder) item { Text("Use the arrows to change the order guests see. Tap Done when finished.", Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.bodySmall) }

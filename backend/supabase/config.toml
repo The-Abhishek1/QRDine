@@ -20,3 +20,7 @@ verify_jwt = false
 verify_jwt = false
 [functions.app-diagnostics]
 verify_jwt = false
+[functions.online-restaurants]
+verify_jwt = false
+[functions.online-menu]
+verify_jwt = false

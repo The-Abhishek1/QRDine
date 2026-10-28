@@ -21,6 +21,8 @@ class SignOutException(
 class SignInIdentityException(val localSessionCleared: Boolean) :
     Exception("The authenticated account did not match the sign-in email.")
 
+class CustomerAccountRequiredException : Exception("Sign in with a customer account to browse restaurants.")
+
 class AuthRepository(private val sb: SupabaseClient) {
     val status get() = sb.auth.sessionStatus
 
@@ -44,11 +46,21 @@ class AuthRepository(private val sb: SupabaseClient) {
         }
     }
 
+    suspend fun signInCustomer(email: String, password: String) {
+        signIn(email, password)
+        val token = sb.auth.currentAccessTokenOrNull()
+        if (token?.let { Jwt.claim(it, "app_role") } != "customer") {
+            sb.auth.clearSession()
+            throw CustomerAccountRequiredException()
+        }
+    }
+
     /** Returns true when a session started; false when the project requires email confirmation first. */
-    suspend fun signUp(email: String, password: String): Boolean {
+    suspend fun signUp(email: String, password: String, accountType: String? = null): Boolean {
         sb.auth.signUpWith(Email, redirectUrl = AUTH_REDIRECT_URL) {
             this.email = email.trim()
             this.password = password
+            if (accountType != null) data = buildJsonObject { put("account_type", accountType) }
         }
         return sb.auth.currentSessionOrNull() != null
     }

@@ -91,6 +91,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
     var signUp by rememberSaveable { mutableStateOf(false) }
     var forgotPassword by rememberSaveable { mutableStateOf(false) }
     var show by rememberSaveable { mutableStateOf(false) }
+    var customerAccount by rememberSaveable { mutableStateOf(false) }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -105,11 +106,13 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
         ) {
             if (signUp && !forgotPassword) OnboardingStepsHero() else BrandMark(80)
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("QR Dine Admin", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text(if (customerAccount) "QR Dine" else "QR Dine Admin", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
                     when {
                         forgotPassword -> "We'll email you a secure reset link"
+                        signUp && customerAccount -> "Create an account to find and order from restaurants"
                         signUp -> "Create your account to get started"
+                        customerAccount -> "Sign in to discover restaurants and order"
                         else -> "Sign in to manage your restaurant"
                     },
                     style = MaterialTheme.typography.bodyLarge,
@@ -121,6 +124,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                     Text(
                         when {
                             forgotPassword -> "PASSWORD RECOVERY"
+                            signUp && customerAccount -> "CREATE YOUR CUSTOMER ACCOUNT"
                             signUp -> "CREATE YOUR RESTAURANT ACCOUNT"
                             else -> "WELCOME BACK"
                         },
@@ -162,7 +166,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                     Button(
                         onClick = {
                             if (forgotPassword) vm.requestPasswordReset(email)
-                            else vm.submit(email, password, signUp)
+                            else vm.submit(email, password, signUp, customerAccount)
                         },
                         enabled = !s.loading,
                         modifier = Modifier
@@ -206,7 +210,20 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                     onClick = { signUp = !signUp; vm.clearMessages() },
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 ) {
-                    Text(if (signUp) "Already have an account? Sign in" else "New restaurant? Create an account")
+                    Text(
+                        when {
+                            customerAccount && signUp -> "Already have an account? Sign in"
+                            customerAccount -> "New customer? Create an account"
+                            signUp -> "Already have an account? Sign in"
+                            else -> "New restaurant? Create an account"
+                        },
+                    )
+                }
+                TextButton(
+                    onClick = { customerAccount = !customerAccount; signUp = false; forgotPassword = false; vm.clearMessages() },
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    Text(if (customerAccount) "Restaurant owner or staff? Sign in" else "Ordering food? Customer sign in")
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

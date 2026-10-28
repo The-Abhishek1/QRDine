@@ -16,6 +16,7 @@ sealed interface RootState {
     data object NeedsRestaurant : RootState
     /** The SaaS owner: a separate area of the same app. */
     data object Platform : RootState
+    data object Customer : RootState
     /** A hotel that exists but may not operate yet: pending approval, rejected, or on hold. */
     data class Blocked(val status: String) : RootState
     data class Ready(val restaurantId: String, val role: String) : RootState
@@ -32,6 +33,7 @@ class RootViewModel : ViewModel() {
                 val rid = Jwt.claim(token, "restaurant_id")
                 when {
                     role == "platform_admin" -> RootState.Platform
+                    role == "customer" -> RootState.Customer
                     (role == "owner" || role == "waiter" || role == "kitchen") && rid != null -> RootState.Ready(rid, role)
                     role == "owner_blocked" -> RootState.Blocked(Jwt.claim(token, "hotel_status") ?: "pending")
                     else -> RootState.NeedsRestaurant

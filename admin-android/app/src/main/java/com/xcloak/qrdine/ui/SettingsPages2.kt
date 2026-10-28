@@ -100,13 +100,25 @@ fun StaffPage() {
             onDismissRequest = { showAdd = false }, title = { Text("New staff login") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(role == "waiter", { role = "waiter" }, label = { Text("Waiter") })
-                        FilterChip(role == "kitchen", { role = "kitchen" }, label = { Text("Kitchen") })
+                    Text("Choose what this login can do", style = MaterialTheme.typography.labelLarge)
+                    listOf(
+                        "waiter" to ("Waiter" to "Takes orders, manages tables and payments."),
+                        "kitchen" to ("Kitchen" to "Sees incoming orders and marks them ready."),
+                    ).forEach { (value, option) ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { role = value },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = role == value, onClick = { role = value })
+                            Column(Modifier.padding(start = 4.dp)) {
+                                Text(option.first, fontWeight = FontWeight.SemiBold)
+                                Text(option.second, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                     }
                     OutlinedTextField(name, { name = it.take(60) }, label = { Text("Name") }, singleLine = true)
                     OutlinedTextField(email, { email = it.trim() }, label = { Text("Email (their login)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-                    OutlinedTextField(pw, { pw = it }, label = { Text("Password (8+)") }, singleLine = true)
+                    OutlinedTextField(pw, { pw = it }, label = { Text("Password (8+)") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
                     Text("Tell them the email and password. They sign in with the same app.", style = MaterialTheme.typography.bodySmall)
                 }
             },

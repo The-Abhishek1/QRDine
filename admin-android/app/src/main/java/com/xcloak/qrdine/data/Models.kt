@@ -21,6 +21,28 @@ data class Restaurant(
     @SerialName("trial_ends_at") val trialEndsAt: String? = null,
     @SerialName("is_open") val isOpen: Boolean = false,
     val languages: List<String> = emptyList(),
+    @SerialName("online_orders_enabled") val onlineOrdersEnabled: Boolean = false,
+    @SerialName("online_delivery_enabled") val onlineDeliveryEnabled: Boolean = false,
+    @SerialName("online_pickup_enabled") val onlinePickupEnabled: Boolean = false,
+    @SerialName("online_upi_enabled") val onlineUpiEnabled: Boolean = false,
+    @SerialName("online_cod_enabled") val onlineCodEnabled: Boolean = false,
+    @SerialName("online_delivery_fee") val onlineDeliveryFee: Int = 0,
+    @SerialName("online_cod_fee") val onlineCodFee: Int = 0,
+)
+
+@Serializable
+data class OnlineRestaurant(
+    val id: String,
+    val name: String,
+    val address: String? = null,
+    val phone: String? = null,
+    @SerialName("logo_url") val logoUrl: String? = null,
+    @SerialName("online_delivery_enabled") val deliveryEnabled: Boolean = false,
+    @SerialName("online_pickup_enabled") val pickupEnabled: Boolean = false,
+    @SerialName("online_delivery_fee") val deliveryFee: Int = 0,
+    @SerialName("online_cod_enabled") val codEnabled: Boolean = false,
+    @SerialName("online_cod_fee") val codFee: Int = 0,
+    @SerialName("online_upi_enabled") val upiEnabled: Boolean = false,
 )
 
 @Serializable

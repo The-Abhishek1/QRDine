@@ -42,9 +42,11 @@ import kotlinx.coroutines.delay
 
 private val TITLES = mapOf(
     "home" to "Settings", "profile" to "Restaurant details", "billing" to "Billing, tax and UPI", "ordering" to "Ordering mode",
+    "online" to "Online orders",
     "offers" to "Offers and announcement", "alerts" to "Alert health", "account" to "Account",
     "staff" to "Staff logins", "pin" to "Manager PIN", "printer" to "Receipt printer", "languages" to "Guest languages", "device" to "This device",
 )
+private val UPI_ID_PATTERN = Regex("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,6 +95,7 @@ fun SettingsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, stat
                 page == "profile" -> ProfilePage(r, s.busy, vm)
                 page == "billing" -> BillingPage(r, s.busy, vm)
                 page == "ordering" -> OrderingPage(r, s.busy, vm)
+                page == "online" -> OnlineOrdersPage(r, s.busy, vm)
                 page == "offers" -> OffersPage(s.announcement, s.coupons, s.busy, vm)
                 page == "alerts" -> AlertsPage(r.isOpen)
                 page == "staff" -> StaffPage()
@@ -156,6 +159,7 @@ private fun Home(r: Restaurant, status: HotelStatus?, role: String, onOpen: (Str
                         Triple("profile", "Restaurant details", "Name, photo, address, phone, FSSAI"),
                         Triple("billing", "Billing, tax and UPI", "GST, service charge, UPI ID for guests"),
                         Triple("ordering", "Ordering mode", if (r.mode == "open") "Tables open automatically on scan" else "You open each table"),
+                        Triple("online", "Online orders", if (r.onlineOrdersEnabled) "Accept delivery and pickup orders" else "Set up customer app orders"),
                         Triple("offers", "Offers and announcement", "Today's message to guests, coupon codes"),
                         Triple("languages", "Guest languages", if (r.languages.isEmpty()) "English only" else "English + " + r.languages.joinToString { LANG_NAMES[it] ?: it }),
                         Triple("staff", "Staff logins", "Waiter and kitchen accounts"),
@@ -236,7 +240,7 @@ private fun BillingPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel) {
         mode == "regular" && (rateVal == null || rateVal < 0 || rateVal > 28) -> "GST rate must be between 0 and 28."
         serviceVal == null || serviceVal < 0 || serviceVal > 20 -> "Service charge must be between 0 and 20."
         gstin.isNotBlank() && gstin.length != 15 -> "A GSTIN has exactly 15 characters."
-        upi.isNotBlank() && !upi.contains("@") -> "A UPI ID looks like name@bank."
+        upi.isNotBlank() && !UPI_ID_PATTERN.matches(upi.trim()) -> "Enter a valid UPI ID, such as name@bank."
         else -> null
     }
 
@@ -263,7 +267,7 @@ private fun BillingPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel) {
         OutlinedTextField(upi, { upi = it.trim().take(60) }, label = { Text("UPI ID (e.g. hotel@okbank)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             supportingText = { Text("Guests see a Pay with UPI button after requesting the bill. You still confirm the credit in your own UPI app.") })
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Button({ vm.saveBilling(mode, rateVal ?: 5.0, gstin, serviceVal ?: 0.0, upi) }, enabled = !busy && error == null, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save") }
+        Button({ vm.saveBilling(mode, rateVal ?: 5.0, gstin, serviceVal ?: 0.0, upi.trim()) }, enabled = !busy && error == null, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save") }
         Text("Have your CA confirm the GST settings before you print bills.", style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -280,6 +284,118 @@ private fun OrderingPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel) {
             Switch(open, { vm.setMode(if (it) "open" else "staff_activated") }, enabled = !busy)
         }
         Text("Staff-opened tables are safer: nobody can order from a photo of the QR code. Use open ordering only if you can watch every table. Every order still needs your approval either way.", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun OnlineOrdersPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel) {
+    var enabled by remember(r) { mutableStateOf(r.onlineOrdersEnabled) }
+    var delivery by remember(r) { mutableStateOf(r.onlineDeliveryEnabled) }
+    var pickup by remember(r) { mutableStateOf(r.onlinePickupEnabled) }
+    var upi by remember(r) { mutableStateOf(r.onlineUpiEnabled) }
+    var cod by remember(r) { mutableStateOf(r.onlineCodEnabled) }
+    var deliveryFee by remember(r) { mutableStateOf("%.2f".format(java.util.Locale.US, r.onlineDeliveryFee / 100.0)) }
+    var codFee by remember(r) { mutableStateOf("%.2f".format(java.util.Locale.US, r.onlineCodFee / 100.0)) }
+
+    fun parseFee(value: String): Int? = runCatching {
+        val amount = java.math.BigDecimal(value.trim())
+        if (amount.signum() < 0 || amount.scale() > 2 || amount > java.math.BigDecimal("1000")) null
+        else amount.movePointRight(2).intValueExact()
+    }.getOrNull()
+    val deliveryFeePaise = parseFee(deliveryFee)
+    val codFeePaise = parseFee(codFee)
+    val feeError = when {
+        delivery && deliveryFeePaise == null -> "Delivery fee must be between ₹0 and ₹1,000, with at most two decimal places."
+        cod && codFeePaise == null -> "COD fee must be between ₹0 and ₹1,000, with at most two decimal places."
+        else -> null
+    }
+    val setupError = when {
+        enabled && !delivery && !pickup -> "Choose delivery, pickup, or both before enabling online orders."
+        enabled && !upi && !cod -> "Choose at least one payment method before enabling online orders."
+        upi && !UPI_ID_PATTERN.matches(r.upiId.orEmpty().trim()) -> "Add a valid UPI ID under Billing, tax and UPI before enabling UPI payments."
+        else -> null
+    }
+    val error = setupError ?: feeError
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Customer app ordering", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "This controls orders placed through QR Dine's customer app. It does not change table QR ordering.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            "Customer online ordering is being built in stages and is not live yet. Saving these options does not make your restaurant visible or start accepting online orders.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.tertiary,
+        )
+        SettingSwitch(
+            title = "Accept online orders",
+            detail = "Keep this off until your menu and fulfilment details are ready.",
+            checked = enabled,
+            onCheckedChange = { enabled = it },
+        )
+        HorizontalDivider()
+        Text("Fulfilment", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        SettingSwitch("Delivery", "Customers order for delivery from your restaurant.", delivery, { delivery = it })
+        if (delivery) {
+            OutlinedTextField(
+                value = deliveryFee,
+                onValueChange = { deliveryFee = it.filter { c -> c.isDigit() || c == '.' }.take(7) },
+                label = { Text("Delivery fee (₹)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        SettingSwitch("Pickup", "Customers collect their order from your restaurant.", pickup, { pickup = it })
+        HorizontalDivider()
+        Text("Payment methods", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        SettingSwitch("UPI", "Customers pay using your restaurant UPI ID.", upi, { upi = it })
+        if (upi && r.upiId.isNullOrBlank()) {
+            Text("Add your UPI ID under Billing, tax and UPI first.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        SettingSwitch("Cash on delivery", "Customer pays your staff when the order arrives.", cod, { cod = it })
+        if (cod) {
+            OutlinedTextField(
+                value = codFee,
+                onValueChange = { codFee = it.filter { c -> c.isDigit() || c == '.' }.take(7) },
+                label = { Text("COD fee (₹)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Text(
+            "Fees are shown to customers before they confirm an order. Rain or temporary surcharges are not configured here.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        Button(
+            onClick = {
+                vm.saveOnlineOrderSettings(
+                    enabled,
+                    delivery,
+                    pickup,
+                    upi,
+                    cod,
+                    deliveryFeePaise ?: r.onlineDeliveryFee,
+                    codFeePaise ?: r.onlineCodFee,
+                )
+            },
+            enabled = !busy && error == null,
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+        ) { Text("Save online order settings") }
+    }
+}
+
+@Composable
+private fun SettingSwitch(title: String, detail: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

@@ -5,7 +5,7 @@ import { type CartLine, lineKey, unitPrice } from "@/lib/cart";
 import { rupees } from "@/lib/money";
 import { useI18n } from "@/lib/i18n";
 
-export default function DishSheet({ dish, onAdd, onClose }: { dish: Dish; onAdd: (line: CartLine) => void; onClose: () => void }) {
+export default function DishSheet({ dish, maxQty, onAdd, onClose }: { dish: Dish; maxQty: number; onAdd: (line: CartLine) => void; onClose: () => void }) {
   const { t, pick } = useI18n();
   const [variantId, setVariantId] = useState<string | null>(dish.variants[0]?.id ?? null);
   const [sel, setSel] = useState<Record<string, string[]>>({});
@@ -53,7 +53,7 @@ export default function DishSheet({ dish, onAdd, onClose }: { dish: Dish; onAdd:
             <legend>{g.name} <small>· {g.min_select === 0 ? `${t("optional")}, ` : `${t("chooseAtLeast", { n: g.min_select })}, `}{g.max_select === 1 ? t("chooseOne") : t("chooseUpTo", { n: g.max_select })}</small></legend>
             {g.addons.map((a) => (
               <label key={a.id} className={`opt ${a.is_available ? "" : "opt-off"}`}>
-                <input type={g.max_select === 1 ? "radio" : "checkbox"} name={`g-${g.id}`} disabled={!a.is_available}
+                <input type={g.max_select === 1 && g.min_select > 0 ? "radio" : "checkbox"} name={`g-${g.id}`} disabled={!a.is_available}
                   checked={(sel[g.id] ?? []).includes(a.id)} onChange={() => toggle(g.id, a.id, g.max_select)} />
                 <span>{a.name}{!a.is_available ? ` (${t("soldOut")})` : ""}</span><b>{a.price > 0 ? `+${rupees(a.price)}` : ""}</b>
               </label>
@@ -73,9 +73,15 @@ export default function DishSheet({ dish, onAdd, onClose }: { dish: Dish; onAdd:
 
         <div className="sheet-actions">
           <div className="stepper" role="group" aria-label={t("quantity")}>
-            <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label={t("remove")}>−</button><span>{qty}</span><button onClick={() => setQty((q) => Math.min(50, q + 1))} aria-label={t("add")}>+</button>
+            <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label={t("remove")}>−</button>
+            <span>{qty}</span>
+            <button
+              onClick={() => setQty((q) => Math.min(maxQty, 50, q + 1))}
+              disabled={qty >= Math.min(maxQty, 50)}
+              aria-label={t("add")}
+            >+</button>
           </div>
-          <button className="btn-primary" disabled={!valid} onClick={() => { onAdd({ key: lineKey(dish.id, variantId, addonIds, note), dishId: dish.id, qty, variantId, addonIds, instructions: note.trim() }); onClose(); }}>
+          <button className="btn-primary" disabled={!valid || qty > maxQty || maxQty < 1} onClick={() => { onAdd({ key: lineKey(dish.id, variantId, addonIds, note), dishId: dish.id, qty, variantId, addonIds, instructions: note.trim() }); onClose(); }}>
             {t("addToOrder")} · {rupees(price)}
           </button>
         </div>

@@ -7,6 +7,7 @@ import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.SignInIdentityException
 import com.xcloak.qrdine.data.SignOutException
+import com.xcloak.qrdine.data.CustomerAccountRequiredException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +27,7 @@ class AuthViewModel : ViewModel() {
     private val _state = MutableStateFlow(AuthUiState())
     val state: StateFlow<AuthUiState> = _state
 
-    fun submit(email: String, password: String, signUp: Boolean) {
+    fun submit(email: String, password: String, signUp: Boolean, customerAccount: Boolean = false) {
         if (email.isBlank() || password.length < 8) {
             _state.value = AuthUiState(error = "Enter a valid email and a password of at least 8 characters.")
             return
@@ -35,14 +36,14 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 if (signUp) {
-                    val started = auth.signUp(email, password)
+                    val started = auth.signUp(email, password, if (customerAccount) "customer" else null)
                     _state.value = if (started) AuthUiState()
                     else AuthUiState(
                         info = "We sent a confirmation link to your email. Confirm it before signing in.",
                         verificationPending = true,
                     )
                 } else {
-                    auth.signIn(email, password)
+                    if (customerAccount) auth.signInCustomer(email, password) else auth.signIn(email, password)
                     _state.value = AuthUiState()
                 }
             } catch (e: Exception) {
@@ -54,6 +55,8 @@ class AuthViewModel : ViewModel() {
                         } else {
                             "The authenticated account did not match the email entered, and we couldn't clear the session. Restart the app before trying another account."
                         }
+                    } else if (e is CustomerAccountRequiredException) {
+                        "That account is not a customer account. Use the restaurant sign-in option, or create a customer account."
                     } else authError(e),
                 )
             }

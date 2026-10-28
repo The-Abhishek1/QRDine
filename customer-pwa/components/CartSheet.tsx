@@ -4,7 +4,7 @@ import { rupees } from "@/lib/money";
 import { useI18n } from "@/lib/i18n";
 import type { CartLine } from "@/lib/cart";
 
-export type CartRow = { line: CartLine; dish: Dish; unit: number; label: string; problem: string | null; freeQty: number };
+export type CartRow = { line: CartLine; dish: Dish; unit: number; label: string; problem: string | null; freeQty: number; canIncrease: boolean };
 
 export default function CartSheet({
   rows, suggestions, orderType, setOrderType, note, setNote, error, placing, onInc, onDec, onSuggest, onPlace, onClose,
@@ -27,7 +27,7 @@ export default function CartSheet({
         </div>
 
         <ul className="cart-lines">
-          {rows.map(({ line, label, unit, problem, freeQty }) => (
+          {rows.map(({ line, label, unit, problem, freeQty, canIncrease }) => (
             <li key={line.key}>
               <div>
                 <div className="cart-name">{label}</div>
@@ -39,7 +39,7 @@ export default function CartSheet({
                 <div className="stepper" role="group" aria-label={label}>
                   <button onClick={() => onDec(line.key)} aria-label={`${t("remove")} ${label}`}>−</button>
                   <span>{line.qty}</span>
-                  <button onClick={() => onInc(line.key)} aria-label={`${t("add")} ${label}`}>+</button>
+                  <button onClick={() => onInc(line.key)} disabled={!canIncrease} aria-label={`${t("add")} ${label}`}>+</button>
                 </div>
                 <div className="cart-price">{rupees(unit * (line.qty - freeQty))}</div>
               </div>

@@ -10,14 +10,14 @@ function VegMark({ veg }: { veg: boolean }) {
   return <span className={`veg ${veg ? "veg-yes" : "veg-no"}`} role="img" aria-label={t(veg ? "vegetarian" : "nonVegetarian")}><i /></span>;
 }
 
-function Stepper({ qty, onAdd, onRemove, name }: { qty: number; onAdd: () => void; onRemove: () => void; name: string }) {
+function Stepper({ qty, onAdd, onRemove, name, canAddMore }: { qty: number; onAdd: () => void; onRemove: () => void; name: string; canAddMore: boolean }) {
   const { t } = useI18n();
   if (qty === 0) return <button className="btn-add" onClick={onAdd} aria-label={`${t("add")} ${name}`}>{t("add")}</button>;
   return (
     <div className="stepper" role="group" aria-label={`${name}`}>
       <button onClick={onRemove} aria-label={`${t("remove")} ${name}`}>−</button>
       <span aria-live="polite">{qty}</span>
-      <button onClick={onAdd} aria-label={`${t("add")} ${name}`}>+</button>
+      <button onClick={onAdd} disabled={!canAddMore} aria-label={`${t("add")} ${name}`}>+</button>
     </div>
   );
 }
@@ -89,7 +89,7 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
           <ul>
             {dishes.map((d) => {
               const simple = isSimple(d);
-              const orderable = d.is_available && c.open_now;
+              const orderable = d.is_available && c.open_now && (d.stock_left === null || d.stock_left > 0);
               const qty = simple
                 ? (lines.find((l) => l.key === lineKey(d.id, null, [], ""))?.qty ?? 0)
                 : lines.filter((l) => l.dishId === d.id).reduce((n, l) => n + l.qty, 0);
@@ -110,10 +110,10 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
                   </div>
                   <div className="dish-side">
                     {d.image_url ? <img src={d.image_url} alt="" loading="lazy" width={96} height={96} referrerPolicy="no-referrer" /> : <div className="dish-noimg" />}
-                    {!orderable ? <span className="out-tag">{d.is_available ? t("notNow") : t("soldOut")}</span>
-                      : simple ? <Stepper qty={qty} onAdd={() => onQuickAdd(d.id)} onRemove={() => onQuickRemove(d.id)} name={pick(d.name, d.name_i18n)} />
+                    {!orderable ? <span className="out-tag">{d.stock_left === 0 || !d.is_available ? t("soldOut") : t("notNow")}</span>
+                      : simple ? <Stepper qty={qty} onAdd={() => onQuickAdd(d.id)} onRemove={() => onQuickRemove(d.id)} name={pick(d.name, d.name_i18n)} canAddMore={qty < 50 && (d.stock_left === null || qty < d.stock_left)} />
                       : <>
-                          <button className="btn-add" onClick={() => onConfigure(d)}>{t("add")}</button>
+                          <button className="btn-add" disabled={d.stock_left !== null && qty >= d.stock_left} onClick={() => onConfigure(d)}>{t("add")}</button>
                           {qty > 0 && <span className="in-cart">{t("inCart", { n: qty })}</span>}
                         </>}
                   </div>

@@ -114,6 +114,27 @@ class OwnerRepository(private val sb: SupabaseClient) {
         sb.from("restaurants").update({ set("mode", mode) }) { filter { eq("id", id) } }
     }
 
+    suspend fun saveOnlineOrderSettings(
+        id: String,
+        enabled: Boolean,
+        delivery: Boolean,
+        pickup: Boolean,
+        upi: Boolean,
+        cod: Boolean,
+        deliveryFeePaise: Int,
+        codFeePaise: Int,
+    ) {
+        sb.from("restaurants").update({
+            set("online_orders_enabled", enabled)
+            set("online_delivery_enabled", delivery)
+            set("online_pickup_enabled", pickup)
+            set("online_upi_enabled", upi)
+            set("online_cod_enabled", cod)
+            set("online_delivery_fee", deliveryFeePaise)
+            set("online_cod_fee", codFeePaise)
+        }) { filter { eq("id", id) } }
+    }
+
     suspend fun setLanguages(id: String, languages: List<String>) {
         sb.from("restaurants").update({ set("languages", languages) }) { filter { eq("id", id) } }
     }

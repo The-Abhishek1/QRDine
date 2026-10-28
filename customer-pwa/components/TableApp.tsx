@@ -156,6 +156,12 @@ export default function TableApp({ token }: { token: string }) {
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", tick); };
   }, [phase.kind, inProgress]);
   useEffect(() => {
+    if (phase.kind !== "ready") return;
+    const tick = () => { if (document.visibilityState === "visible") void refreshRef.current(true); };
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, [phase.kind]);
+  useEffect(() => {
     if (phase.kind !== "ready" || !guest.current) return;
     const sid = sessionIdFromToken(guest.current);
     if (!sid) return;
@@ -169,17 +175,28 @@ export default function TableApp({ token }: { token: string }) {
 
   const dishById = useMemo(() => new Map((menu?.dishes ?? []).map((d) => [d.id, d])), [menu]);
   const catById = useMemo(() => new Map((menu?.categories ?? []).map((c) => [c.id, c])), [menu]);
+  const remainingForDish = useCallback((dishId: string, lines: CartLine[]) => {
+    const stock = dishById.get(dishId)?.stock_left;
+    const inCart = lines.filter((line) => line.dishId === dishId).reduce((n, line) => n + line.qty, 0);
+    return stock === null || stock === undefined ? Number.MAX_SAFE_INTEGER : Math.max(0, stock - inCart);
+  }, [dishById]);
 
   const rows: CartRow[] = useMemo(() => cart.flatMap((line) => {
     const d = dishById.get(line.dishId);
     if (!d) return [];
     const c = catById.get(d.category_id);
-    const problem = !d.is_available ? t("soldOut") : c && !c.open_now ? t("notNow") : null;
+    const dishQty = cart.filter((item) => item.dishId === d.id).reduce((n, item) => n + item.qty, 0);
+    const problem = !d.is_available || d.stock_left === 0 ? t("soldOut")
+      : c && !c.open_now ? t("notNow")
+        : d.stock_left !== null && dishQty > d.stock_left ? t("dishUnavailable", { name: pick(d.name, d.name_i18n) }) : null;
     const variant = d.variants.find((v) => v.id === line.variantId);
     const addons = d.addon_groups.flatMap((g) => g.addons).filter((a) => line.addonIds.includes(a.id));
     const label = pick(d.name, d.name_i18n) + (variant ? ` (${variant.name})` : "") + (addons.length ? ` + ${addons.map((a) => a.name).join(", ")}` : "");
-    return [{ line, dish: d, unit: unitPrice(d, line.variantId, line.addonIds), label, problem, freeQty: 0 }];
-  }), [cart, dishById, catById, t, pick]);
+    return [{
+      line, dish: d, unit: unitPrice(d, line.variantId, line.addonIds), label, problem, freeQty: 0,
+      canIncrease: line.qty < 50 && remainingForDish(d.id, cart) > 0,
+    }];
+  }), [cart, dishById, catById, remainingForDish, t, pick]);
   const rowsWithOffers = useMemo(() => {
     const free = freeOfferQuantities(rows, menu?.offers ?? []);
     return rows.map((row) => ({ ...row, freeQty: free.get(row.line.key) ?? 0 }));
@@ -193,14 +210,21 @@ export default function TableApp({ token }: { token: string }) {
     const ids: string[] = [];
     for (const id of inCart) for (const p of menu.pairs[id] ?? []) if (!inCart.has(p) && !ids.includes(p)) ids.push(p);
     if (ids.length === 0) for (const b of menu.bestsellers) if (!inCart.has(b)) ids.push(b);
-    return ids.map((id) => dishById.get(id)).filter((d): d is Dish => !!d && d.is_available && (catById.get(d.category_id)?.open_now ?? true)).slice(0, 3);
-  }, [menu, cart, dishById, catById]);
+    return ids.map((id) => dishById.get(id)).filter((d): d is Dish =>
+      !!d && d.is_available && remainingForDish(d.id, cart) > 0 && (catById.get(d.category_id)?.open_now ?? true),
+    ).slice(0, 3);
+  }, [menu, cart, dishById, catById, remainingForDish]);
 
   const addLine = (l: CartLine) => setCart((c) => {
     const i = c.findIndex((x) => x.key === l.key);
-    return i >= 0 ? c.map((x, j) => (j === i ? { ...x, qty: Math.min(x.qty + l.qty, 50) } : x)) : [...c, l];
+    const lineRemaining = i >= 0 ? Math.max(0, 50 - c[i].qty) : 50;
+    const permittedQty = Math.min(l.qty, lineRemaining, remainingForDish(l.dishId, c));
+    if (permittedQty < 1) return c;
+    return i >= 0 ? c.map((x, j) => (j === i ? { ...x, qty: Math.min(x.qty + permittedQty, 50) } : x)) : [...c, { ...l, qty: permittedQty }];
   });
-  const incKey = (key: string) => setCart((c) => c.map((x) => (x.key === key ? { ...x, qty: Math.min(x.qty + 1, 50) } : x)));
+  const incKey = (key: string) => setCart((c) => c.map((x) =>
+    x.key === key && x.qty < 50 && remainingForDish(x.dishId, c) > 0 ? { ...x, qty: x.qty + 1 } : x,
+  ));
   const decKey = (key: string) => setCart((c) => c.flatMap((x) => (x.key !== key ? [x] : x.qty <= 1 ? [] : [{ ...x, qty: x.qty - 1 }])));
   const quickAdd = (id: string) => addLine({ key: lineKey(id, null, [], ""), dishId: id, qty: 1, variantId: null, addonIds: [], instructions: "" });
   const quickRemove = (id: string) => decKey(lineKey(id, null, [], ""));
@@ -220,7 +244,7 @@ export default function TableApp({ token }: { token: string }) {
       });
       try { localStorage.removeItem(kKey); } catch {}
       setCart([]); setNote(""); setCartOpen(false); setTab("orders");
-      await refresh();
+      await refresh(true);
     } catch (e) {
       const code = e instanceof ApiError ? e.code : "network";
       const detail = e instanceof ApiError ? e.detail : undefined;
@@ -346,7 +370,7 @@ export default function TableApp({ token }: { token: string }) {
           error={cartError} placing={placing} onInc={incKey} onDec={decKey} onSuggest={suggest} onPlace={placeOrder} onClose={() => setCartOpen(false)}
         />
       )}
-      {configuring && <DishSheet dish={configuring} onAdd={addLine} onClose={() => setConfiguring(null)} />}
+      {configuring && <DishSheet dish={configuring} maxQty={remainingForDish(configuring.id, cart)} onAdd={addLine} onClose={() => setConfiguring(null)} />}
     </div>,
   );
 }

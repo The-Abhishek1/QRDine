@@ -23,13 +23,12 @@ Deno.serve(handler(async (req) => {
   if (!can) return json(200, { state: "unavailable", ...base });
   if (!rest.is_open) return json(200, { state: "shop_closed", ...base });
 
-  let sessionId: string | null = table.status === "closed" ? null : table.active_session_id;
-  if (!sessionId) {
-    if (rest.mode !== "open") return json(200, { state: "table_closed", ...base });
-    const { data, error } = await db.rpc("open_session_if_needed", { p_table_id: table.id });
-    if (error) throw new Error(error.message);
-    sessionId = data as string;
+  if (rest.mode !== "open" && (table.status === "closed" || !table.active_session_id)) {
+    return json(200, { state: "table_closed", ...base });
   }
+  const { data: sessionId, error: sessionError } = await db.rpc("open_session_if_needed", { p_table_id: table.id });
+  if (sessionError) throw new Error(sessionError.message);
+  if (!sessionId) throw new Error("session_open_failed");
 
   const pin = body.pin ? String(body.pin).slice(0, 8) : null;
   const { data: pinResult, error: pinErr } = await db.rpc("verify_session_pin", { p_session_id: sessionId, p_pin: pin });

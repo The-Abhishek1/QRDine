@@ -44,9 +44,10 @@ export default function OrdersView({ s, tableLabel, busy, notice, onService, onC
   const settled = s.orders.every((o) => o.status === "completed" || o.status === "rejected" || o.status === "cancelled");
   const canRequestBill = s.orders.some((o) => o.status === "completed") && settled;
   const b = s.bill;
-  const upi = s.restaurant.upi_id;
-  const upiLink = upi && b.total > 0
-    ? `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(s.restaurant.name)}&am=${(b.total / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Table ${tableLabel}`)}`
+  const upi = s.restaurant.upi_id?.trim();
+  const validUpi = upi && /^[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}$/.test(upi);
+  const upiLink = validUpi && b.total > 0
+    ? `upi://pay?pa=${upi}&pn=${encodeURIComponent(s.restaurant.name.slice(0, 50))}&am=${(b.total / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Table ${tableLabel}`.slice(0, 50))}`
     : null;
 
   return (
@@ -102,7 +103,7 @@ export default function OrdersView({ s, tableLabel, busy, notice, onService, onC
       {billOpen && upiLink && (
         <a className="btn-primary btn-link" href={upiLink}>{t("payUpi", { amount: rupees(b.total) })}</a>
       )}
-      {billOpen && upiLink && <p className="fine">{t("afterPay")}</p>}
+      {billOpen && upiLink && <p className="fine">{t("afterPay")}<br />UPI ID: <strong>{upi}</strong> · Amount: {rupees(b.total)}</p>}
 
       <div className="actions">
         <button className="btn-outline" disabled={busy || waiterOpen} onClick={() => onService("waiter")}>{waiterOpen ? t("waiterComing") : t("callWaiter")}</button>

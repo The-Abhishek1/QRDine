@@ -41,6 +41,7 @@ fun AppRoot() {
         RootState.SignedOut -> AuthScreen()
         RootState.NeedsRestaurant -> SetupRestaurantScreen()
         RootState.Platform -> PlatformApp()
+        RootState.Customer -> CustomerAppScreen()
         is RootState.Blocked -> BlockedScreen(s.status)
         is RootState.Ready -> MainScreen(s.restaurantId, s.role)
     }

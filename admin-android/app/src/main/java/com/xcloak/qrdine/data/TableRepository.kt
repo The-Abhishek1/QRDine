@@ -14,7 +14,7 @@ class TableRepository(private val sb: SupabaseClient, private val restaurantId: 
     private fun trailingNumber(label: String): Int? = Regex("(\\d+)$").find(label)?.groupValues?.get(1)?.toIntOrNull()
 
     suspend fun tables(): List<DiningTable> =
-        sb.from("dining_tables").select().decodeList<DiningTable>()
+        sb.from("dining_tables").select { filter { eq("restaurant_id", restaurantId) } }.decodeList<DiningTable>()
             .sortedWith(compareBy({ trailingNumber(it.label) ?: Int.MAX_VALUE }, { it.label }))
 
     /** Adds T<n+1>... continuing after the highest existing number. */

@@ -15,7 +15,7 @@ class MenuRepository(private val sb: SupabaseClient, private val restaurantId: S
         sb.from("categories").select().decodeList<Category>().filter { it.deletedAt == null }.sortedWith(compareBy({ it.sort }, { it.name }))
 
     suspend fun dishes(): List<Dish> =
-        sb.from("dishes").select().decodeList<Dish>()
+        sb.from("dishes").select { filter { eq("restaurant_id", restaurantId) } }.decodeList<Dish>()
             .filter { it.deletedAt == null }
             .sortedWith(compareBy({ it.sort }, { it.name.lowercase() }))
 

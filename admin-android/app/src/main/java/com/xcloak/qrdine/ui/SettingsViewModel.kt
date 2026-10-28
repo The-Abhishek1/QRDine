@@ -90,6 +90,18 @@ class SettingsViewModel(private val restaurantId: String) : ViewModel() {
 
     fun setMode(mode: String) = act("Saved") { repo.setMode(it, mode) }
 
+    fun saveOnlineOrderSettings(
+        enabled: Boolean,
+        delivery: Boolean,
+        pickup: Boolean,
+        upi: Boolean,
+        cod: Boolean,
+        deliveryFeePaise: Int,
+        codFeePaise: Int,
+    ) = act("Online ordering settings saved") {
+        repo.saveOnlineOrderSettings(it, enabled, delivery, pickup, upi, cod, deliveryFeePaise, codFeePaise)
+    }
+
     fun uploadLogo(context: Context, uri: Uri) = act("Photo updated") { rid ->
         val bytes = withContext(Dispatchers.IO) { ImageUtil.compress(context, uri) }
         repo.setLogo(rid, repo.uploadLogo(rid, bytes))
