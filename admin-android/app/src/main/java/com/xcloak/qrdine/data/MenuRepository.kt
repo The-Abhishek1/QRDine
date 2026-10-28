@@ -80,6 +80,13 @@ class MenuRepository(private val sb: SupabaseClient, private val restaurantId: S
         sb.from("dishes").update({ set("is_available", available) }) { filter { eq("id", id) } }
     }
 
+    suspend fun setOnlineAvailable(id: String, available: Boolean) {
+        sb.postgrest.rpc(
+            "set_online_order_dish_availability",
+            buildJsonObject { put("p_dish_id", id); put("p_available", available) },
+        )
+    }
+
     /** Soft delete so old bills keep their dish references. */
     suspend fun deleteDish(id: String) {
         sb.from("dishes").update({ set("deleted_at", java.time.Instant.now().toString()) }) { filter { eq("id", id) } }

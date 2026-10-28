@@ -95,7 +95,7 @@ fun SettingsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, stat
                 page == "profile" -> ProfilePage(r, s.busy, vm)
                 page == "billing" -> BillingPage(r, s.busy, vm)
                 page == "ordering" -> OrderingPage(r, s.busy, vm)
-                page == "online" -> OnlineOrdersPage(r, s.busy, vm)
+                page == "online" -> OnlineOrdersPage(r, s.onlineCodAvailable, s.busy, vm)
                 page == "offers" -> OffersPage(s.announcement, s.coupons, s.busy, vm)
                 page == "alerts" -> AlertsPage(r.isOpen)
                 page == "staff" -> StaffPage()
@@ -288,14 +288,15 @@ private fun OrderingPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel) {
 }
 
 @Composable
-private fun OnlineOrdersPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel) {
+private fun OnlineOrdersPage(r: Restaurant, codAvailable: Boolean, busy: Boolean, vm: SettingsViewModel) {
     var enabled by remember(r) { mutableStateOf(r.onlineOrdersEnabled) }
     var delivery by remember(r) { mutableStateOf(r.onlineDeliveryEnabled) }
     var pickup by remember(r) { mutableStateOf(r.onlinePickupEnabled) }
     var upi by remember(r) { mutableStateOf(r.onlineUpiEnabled) }
-    var cod by remember(r) { mutableStateOf(r.onlineCodEnabled) }
+    var cod by remember(r, codAvailable) { mutableStateOf(r.onlineCodEnabled && codAvailable) }
     var deliveryFee by remember(r) { mutableStateOf("%.2f".format(java.util.Locale.US, r.onlineDeliveryFee / 100.0)) }
     var codFee by remember(r) { mutableStateOf("%.2f".format(java.util.Locale.US, r.onlineCodFee / 100.0)) }
+    var applicationNote by remember(r) { mutableStateOf(r.onlineApplicationNote.orEmpty()) }
 
     fun parseFee(value: String): Int? = runCatching {
         val amount = java.math.BigDecimal(value.trim())
@@ -323,16 +324,36 @@ private fun OnlineOrdersPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel
             "This controls orders placed through QR Dine's customer app. It does not change table QR ordering.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        Text(
-            "Customer online ordering is being built in stages and is not live yet. Saving these options does not make your restaurant visible or start accepting online orders.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.tertiary,
-        )
+        val appStatus = when (r.onlineApplicationStatus) {
+            "pending" -> "Application submitted — waiting for platform-admin approval."
+            "approved" -> "Online-order application approved. Configure your services and enable orders when ready."
+            "rejected" -> "Application not approved: ${r.onlineApplicationReview ?: "Update your details and apply again."}"
+            else -> "Submit an application. Online ordering only becomes available after platform-admin approval."
+        }
+        Text(appStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+        if (r.onlineApplicationStatus != "approved" && r.onlineApplicationStatus != "pending") {
+            OutlinedTextField(
+                applicationNote,
+                { applicationNote = it.take(500) },
+                label = { Text("Delivery / pickup service details (optional)") },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = { vm.submitOnlineApplication(applicationNote) },
+                enabled = !busy && r.phone?.isNotBlank() == true && r.address?.isNotBlank() == true && (delivery || pickup),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Submit online-order application") }
+            if (r.phone.isNullOrBlank() || r.address.isNullOrBlank() || (!delivery && !pickup)) {
+                Text("Complete your restaurant phone, address, and delivery or pickup settings before applying.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
         SettingSwitch(
             title = "Accept online orders",
-            detail = "Keep this off until your menu and fulfilment details are ready.",
+            detail = if (r.onlineApplicationStatus == "approved") "Pause or resume the online ordering listing." else "Available after your application is approved.",
             checked = enabled,
             onCheckedChange = { enabled = it },
+            enabled = r.onlineApplicationStatus == "approved",
         )
         HorizontalDivider()
         Text("Fulfilment", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -354,7 +375,14 @@ private fun OnlineOrdersPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel
         if (upi && r.upiId.isNullOrBlank()) {
             Text("Add your UPI ID under Billing, tax and UPI first.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
-        SettingSwitch("Cash on delivery", "Customer pays your staff when the order arrives.", cod, { cod = it })
+        SettingSwitch(
+            "Cash on delivery",
+            if (codAvailable) "Customer pays your staff when the order arrives."
+            else "UPI-only launch period. The platform admin will open COD later.",
+            cod,
+            { cod = it },
+            enabled = codAvailable,
+        )
         if (cod) {
             OutlinedTextField(
                 value = codFee,
@@ -389,13 +417,19 @@ private fun OnlineOrdersPage(r: Restaurant, busy: Boolean, vm: SettingsViewModel
 }
 
 @Composable
-private fun SettingSwitch(title: String, detail: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SettingSwitch(
+    title: String,
+    detail: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
+) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
 

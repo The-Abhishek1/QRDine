@@ -16,7 +16,7 @@ export async function loadMenu(db: SupabaseClient, restaurantId: string) {
   const [cats, dishes, ann, rest, vars, groups, addons, links, ins, offers] = await Promise.all([
     db.from("categories").select("id,name,kind,sort,name_i18n,avail_from,avail_to")
       .eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort").order("name"),
-    db.from("dishes").select("id,category_id,name,description,image_url,base_price,original_price,is_veg,is_available,sort,name_i18n,description_i18n,stock_qty")
+    db.from("dishes").select("id,category_id,name,description,image_url,base_price,original_price,is_veg,is_available,online_available,sort,name_i18n,description_i18n,stock_qty")
       .eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort").order("name"),
     db.from("announcements").select("text").eq("restaurant_id", restaurantId).eq("show_date", today()).order("id", { ascending: false }).limit(1),
     db.from("restaurants").select("languages").eq("id", restaurantId).single(),
@@ -42,7 +42,7 @@ export async function loadMenu(db: SupabaseClient, restaurantId: string) {
   const categories = (cats.data ?? []).map((c) => ({ id: c.id, name: c.name, kind: c.kind, sort: c.sort, name_i18n: c.name_i18n, avail_from: c.avail_from, avail_to: c.avail_to, open_now: openNow(c.avail_from, c.avail_to) }));
   const dishList = (dishes.data ?? []).map((d) => ({
     id: d.id, category_id: d.category_id, name: d.name, description: d.description, image_url: d.image_url, base_price: d.base_price, original_price: d.original_price,
-    is_veg: d.is_veg, is_available: d.is_available, sort: d.sort, name_i18n: d.name_i18n, description_i18n: d.description_i18n,
+    is_veg: d.is_veg, is_available: d.is_available, online_available: d.online_available, sort: d.sort, name_i18n: d.name_i18n, description_i18n: d.description_i18n,
     stock_left: d.stock_qty, variants: varsByDish.get(d.id) ?? [], addon_groups: groupsByDish.get(d.id) ?? [],
   }));
   const insights = (ins.data ?? {}) as { bestsellers?: string[]; pairs?: Record<string, string[]> };

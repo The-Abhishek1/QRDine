@@ -124,16 +124,24 @@ class OwnerRepository(private val sb: SupabaseClient) {
         deliveryFeePaise: Int,
         codFeePaise: Int,
     ) {
-        sb.from("restaurants").update({
-            set("online_orders_enabled", enabled)
-            set("online_delivery_enabled", delivery)
-            set("online_pickup_enabled", pickup)
-            set("online_upi_enabled", upi)
-            set("online_cod_enabled", cod)
-            set("online_delivery_fee", deliveryFeePaise)
-            set("online_cod_fee", codFeePaise)
-        }) { filter { eq("id", id) } }
+        sb.postgrest.rpc("save_online_order_settings", buildJsonObject {
+            put("p_enabled", enabled)
+            put("p_delivery", delivery)
+            put("p_pickup", pickup)
+            put("p_upi", upi)
+            put("p_cod", cod)
+            put("p_delivery_fee", deliveryFeePaise)
+            put("p_cod_fee", codFeePaise)
+        })
     }
+
+    suspend fun submitOnlineApplication(note: String) {
+        sb.postgrest.rpc("submit_online_application", buildJsonObject {
+            if (note.isNotBlank()) put("p_note", note.trim())
+        })
+    }
+
+    suspend fun onlineCodAvailable(): Boolean = sb.postgrest.rpc("online_cod_available").decodeAs<Boolean>()
 
     suspend fun setLanguages(id: String, languages: List<String>) {
         sb.from("restaurants").update({ set("languages", languages) }) { filter { eq("id", id) } }

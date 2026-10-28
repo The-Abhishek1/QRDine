@@ -2,6 +2,75 @@ package com.xcloak.qrdine.data
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+@Serializable
+data class OnlineCustomerProfile(
+    @SerialName("full_name") val fullName: String,
+    val phone: String,
+    val address: String,
+    @SerialName("postal_code") val postalCode: String,
+)
+
+@Serializable
+data class OnlineOrderInputItem(
+    @SerialName("dish_id") val dishId: String,
+    val qty: Int,
+    @SerialName("variant_id") val variantId: String?,
+    @SerialName("addon_ids") val addonIds: List<String>,
+    val instructions: String,
+)
+
+@Serializable
+data class OnlineOrderCreated(
+    @SerialName("order_id") val orderId: String,
+    val duplicate: Boolean,
+    val total: Int,
+)
+
+@Serializable
+data class OnlineOrder(
+    val id: String,
+    @SerialName("restaurant_id") val restaurantId: String,
+    @SerialName("customer_id") val customerId: String,
+    @SerialName("client_key") val clientKey: String = "",
+    val status: String,
+    val fulfilment: String,
+    @SerialName("payment_method") val paymentMethod: String,
+    @SerialName("payment_status") val paymentStatus: String,
+    @SerialName("customer_name") val customerName: String,
+    @SerialName("customer_phone") val customerPhone: String,
+    @SerialName("customer_note") val customerNote: String? = null,
+    @SerialName("delivery_address") val deliveryAddress: String? = null,
+    @SerialName("postal_code") val postalCode: String? = null,
+    @SerialName("payment_reference") val paymentReference: String? = null,
+    @SerialName("items_snapshot") val items: List<OnlineOrderItem> = emptyList(),
+    val subtotal: Int,
+    @SerialName("delivery_fee") val deliveryFee: Int,
+    @SerialName("cod_fee") val codFee: Int,
+    val total: Int,
+    @SerialName("reject_reason") val rejectReason: String? = null,
+    @SerialName("eta_minutes") val etaMinutes: Int? = null,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("accepted_at") val acceptedAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String = "",
+)
+
+@Serializable
+data class OnlineOrderItem(
+    @SerialName("dish_id") val dishId: String = "",
+    val name: String,
+    val qty: Int,
+    @SerialName("unit_price") val unitPrice: Int,
+    @SerialName("variant_name") val variantName: String? = null,
+    val addons: List<OnlineOrderAddon> = emptyList(),
+    val instructions: String? = null,
+)
+
+@Serializable
+data class OnlineOrderAddon(
+    val id: String,
+    val name: String,
+    val price: Int,
+)
 
 @Serializable
 data class OnlineMenuResponse(
@@ -49,6 +118,7 @@ data class OnlineMenuDish(
     @SerialName("original_price") val originalPrice: Int? = null,
     @SerialName("is_veg") val isVeg: Boolean = true,
     @SerialName("is_available") val isAvailable: Boolean = true,
+    @SerialName("online_available") val onlineAvailable: Boolean = true,
     @SerialName("stock_left") val stockLeft: Int? = null,
     val variants: List<OnlineVariant> = emptyList(),
     @SerialName("addon_groups") val addonGroups: List<OnlineAddonGroup> = emptyList(),

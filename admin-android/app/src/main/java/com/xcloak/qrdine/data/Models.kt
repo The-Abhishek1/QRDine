@@ -28,6 +28,9 @@ data class Restaurant(
     @SerialName("online_cod_enabled") val onlineCodEnabled: Boolean = false,
     @SerialName("online_delivery_fee") val onlineDeliveryFee: Int = 0,
     @SerialName("online_cod_fee") val onlineCodFee: Int = 0,
+    @SerialName("online_application_status") val onlineApplicationStatus: String = "not_applied",
+    @SerialName("online_application_note") val onlineApplicationNote: String? = null,
+    @SerialName("online_application_review") val onlineApplicationReview: String? = null,
 )
 
 @Serializable
@@ -37,6 +40,7 @@ data class OnlineRestaurant(
     val address: String? = null,
     val phone: String? = null,
     @SerialName("logo_url") val logoUrl: String? = null,
+    @SerialName("upi_id") val upiId: String? = null,
     @SerialName("online_delivery_enabled") val deliveryEnabled: Boolean = false,
     @SerialName("online_pickup_enabled") val pickupEnabled: Boolean = false,
     @SerialName("online_delivery_fee") val deliveryFee: Int = 0,
@@ -79,6 +83,7 @@ data class Dish(
     @SerialName("original_price") val originalPrice: Int? = null,
     @SerialName("is_veg") val isVeg: Boolean = true,
     @SerialName("is_available") val isAvailable: Boolean = true,
+    @SerialName("online_available") val onlineAvailable: Boolean = true,
     val sort: Int = 0,
     @SerialName("deleted_at") val deletedAt: String? = null,
     @SerialName("stock_qty") val stockQty: Int? = null,
@@ -344,6 +349,18 @@ data class HotelRow(
     @SerialName("orders_30d") val orders30d: Int = 0,
     val tables: Int = 0,
     @SerialName("total_paid") val totalPaid: Long = 0,
+)
+
+@Serializable
+data class OnlineApplication(
+    val id: String,
+    val name: String,
+    val phone: String? = null,
+    val address: String? = null,
+    @SerialName("online_application_status") val status: String,
+    @SerialName("online_application_note") val note: String? = null,
+    @SerialName("online_application_submitted_at") val submittedAt: String? = null,
+    @SerialName("online_application_review") val review: String? = null,
 )
 
 @Serializable

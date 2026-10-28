@@ -1,5 +1,7 @@
 package com.xcloak.qrdine.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,9 +11,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -33,6 +37,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -40,9 +45,12 @@ import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.OnlineRestaurant
 import com.xcloak.qrdine.data.OnlineCartLine
+import com.xcloak.qrdine.data.OnlineCustomerProfile
 import com.xcloak.qrdine.data.OnlineMenu
 import com.xcloak.qrdine.data.OnlineMenuDish
 import com.xcloak.qrdine.data.OnlineAddon
+import com.xcloak.qrdine.data.OnlineOrder
+import com.xcloak.qrdine.data.OnlineOrderInputItem
 import com.xcloak.qrdine.data.OnlineOffer
 import com.xcloak.qrdine.data.OnlineVariant
 import kotlinx.coroutines.launch
@@ -50,6 +58,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerAppScreen() {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var restaurants by remember { mutableStateOf<List<OnlineRestaurant>>(emptyList()) }
     var selectedRestaurant by remember { mutableStateOf<OnlineRestaurant?>(null) }
@@ -58,6 +67,13 @@ fun CustomerAppScreen() {
     var menuRequestId by remember { mutableIntStateOf(0) }
     var configuring by remember { mutableStateOf<OnlineMenuDish?>(null) }
     var cart by remember { mutableStateOf<List<OnlineCartLine>>(emptyList()) }
+    var customerProfile by remember { mutableStateOf<OnlineCustomerProfile?>(null) }
+    var customerOrders by remember { mutableStateOf<List<OnlineOrder>>(emptyList()) }
+    var checkoutOpen by remember { mutableStateOf(false) }
+    var activeOrder by remember { mutableStateOf<OnlineOrder?>(null) }
+    var paymentReference by remember { mutableStateOf("") }
+    var clientOrderKeys by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var orderBusy by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -102,7 +118,80 @@ fun CustomerAppScreen() {
         }
     }
 
-    LaunchedEffect(Unit) { loadRestaurants() }
+    LaunchedEffect(Unit) {
+        loadRestaurants()
+        try {
+            customerProfile = QrDineApp.container.customer.profile()
+            customerOrders = QrDineApp.container.customer.orders()
+        } catch (e: Exception) {
+            Diagnostics.record(QrDineApp.appContext, e, "customer-profile")
+            error = "Your customer profile could not be loaded. Please try again."
+        }
+    }
+
+    fun submitOrder(fulfilment: String, payment: String) {
+        val restaurant = selectedRestaurant ?: return
+        val onlineMenu = menu ?: return
+        scope.launch {
+            orderBusy = true
+            error = null
+            try {
+                val clientKey = clientOrderKeys[restaurant.id] ?: java.util.UUID.randomUUID().toString()
+                clientOrderKeys = clientOrderKeys + (restaurant.id to clientKey)
+                val result = QrDineApp.container.customer.placeOrder(
+                    restaurant.id,
+                    clientKey,
+                    fulfilment,
+                    payment,
+                    cart.map { line ->
+                        OnlineOrderInputItem(line.dishId, line.qty, line.variantId, line.addonIds, "")
+                    },
+                )
+                clientOrderKeys = clientOrderKeys - restaurant.id
+                val deliveryFee = if (fulfilment == "delivery") restaurant.deliveryFee else 0
+                val codFee = if (payment == "cod") restaurant.codFee else 0
+                val createdOrder = OnlineOrder(
+                    id = result.orderId,
+                    restaurantId = restaurant.id,
+                    customerId = "",
+                    status = "pending",
+                    fulfilment = fulfilment,
+                    paymentMethod = payment,
+                    paymentStatus = if (payment == "upi") "awaiting_payment" else "cod_due",
+                    customerName = customerProfile?.fullName.orEmpty(),
+                    customerPhone = customerProfile?.phone.orEmpty(),
+                    items = emptyList(),
+                    subtotal = result.total - deliveryFee - codFee,
+                    deliveryFee = deliveryFee,
+                    codFee = codFee,
+                    total = result.total,
+                    createdAt = "",
+                )
+                activeOrder = createdOrder
+                cart = emptyList()
+                checkoutOpen = false
+                customerOrders = listOf(createdOrder) + customerOrders.filterNot { it.id == createdOrder.id }
+                if (payment == "upi") error = "Order placed. Pay by UPI and submit the payment reference for restaurant verification."
+                try {
+                    customerOrders = QrDineApp.container.customer.orders()
+                    activeOrder = customerOrders.firstOrNull { it.id == result.orderId } ?: createdOrder
+                } catch (e: Exception) {
+                    Diagnostics.record(QrDineApp.appContext, e, "customer-orders-refresh")
+                    error = "Order placed, but its latest status could not be refreshed. Tap Refresh in recent orders to check again."
+                }
+            } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "customer-online-order")
+                error = when {
+                    "profile_required" in e.message.orEmpty() -> "Complete your customer profile before placing an order."
+                    "cod_unavailable" in e.message.orEmpty() -> "Cash on delivery is not currently available."
+                    "restaurant_unavailable" in e.message.orEmpty() -> "This restaurant is no longer accepting online orders."
+                    else -> "Could not place the order. Check your connection and try again."
+                }
+            } finally {
+                orderBusy = false
+            }
+        }
+    }
     val filtered = restaurants.filter {
         query.isBlank() || it.name.contains(query.trim(), ignoreCase = true) ||
             it.address.orEmpty().contains(query.trim(), ignoreCase = true)
@@ -115,6 +204,10 @@ fun CustomerAppScreen() {
                 navigationIcon = {
                     if (selectedRestaurant != null) {
                         IconButton(onClick = {
+                            checkoutOpen = false
+                            activeOrder = null
+                            customerOrders = emptyList()
+                            customerProfile = null
                             menuRequestId++
                             selectedRestaurant = null
                             menu = null
@@ -200,7 +293,7 @@ fun CustomerAppScreen() {
                                 }
                                 items(onlineMenu.dishes.filter { it.categoryId == category.id }, key = { it.id }) { dish ->
                                     val dishCartQty = cart.filter { it.dishId == dish.id }.sumOf { it.qty }
-                                    val available = dish.isAvailable && category.openNow && (dish.stockLeft == null || dish.stockLeft > 0)
+                                    val available = dish.isAvailable && dish.onlineAvailable && category.openNow && (dish.stockLeft == null || dish.stockLeft > 0)
                                     Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                                         Row(
                                             Modifier.fillMaxWidth().padding(12.dp),
@@ -240,7 +333,7 @@ fun CustomerAppScreen() {
                                                 ) { Text("Add") }
                                             } else {
                                                 Text(
-                                                    if (!dish.isAvailable || dish.stockLeft == 0) "Sold out" else "Not available",
+                                                    if (!dish.isAvailable || dish.stockLeft == 0) "Sold out" else if (!dish.onlineAvailable) "Not available online" else "Not available",
                                                     color = MaterialTheme.colorScheme.error,
                                                     style = MaterialTheme.typography.labelSmall,
                                                 )
@@ -272,10 +365,101 @@ fun CustomerAppScreen() {
                                 }
                             }
                             Text(
-                                "Checkout and order placement will be available in the next stage.",
+                                "Online order total includes the fees shown at checkout.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Button(
+                                onClick = { checkoutOpen = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !orderBusy,
+                            ) { Text("Continue to checkout") }
+                        }
+                        activeOrder?.let { order ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Order ${order.id.take(8)} · ${order.status.uppercase()}", fontWeight = FontWeight.Bold)
+                                    Text("Payment: ${order.paymentStatus.replace('_', ' ')}")
+                                    if (order.paymentMethod == "upi" && order.paymentStatus in setOf("awaiting_payment", "verification_required")) {
+                                        val upiId = restaurant.upiId
+                                        if (!upiId.isNullOrBlank()) {
+                                            if (order.paymentStatus == "awaiting_payment") Button(onClick = {
+                                                val uri = Uri.parse(
+                                                    "upi://pay?pa=${Uri.encode(upiId)}&pn=${Uri.encode(restaurant.name)}&am=${"%.2f".format(java.util.Locale.US, order.total / 100.0)}&cu=INR&tn=${Uri.encode("Online order ${order.id.take(8)}")}",
+                                                )
+                                                try {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                                } catch (e: Exception) {
+                                                    Diagnostics.record(QrDineApp.appContext, e, "customer-upi")
+                                                    error = "No UPI payment app is available on this device."
+                                                }
+                                            }) { Text("Pay with UPI") }
+                                            OutlinedTextField(
+                                                value = paymentReference.ifBlank { order.paymentReference.orEmpty() },
+                                                onValueChange = { paymentReference = it.take(100) },
+                                                label = { Text("UPI transaction reference") },
+                                                singleLine = true,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                            Button(
+                                                onClick = {
+                                                    scope.launch {
+                                                        orderBusy = true
+                                                        try {
+                                                            QrDineApp.container.customer.submitPaymentReference(order.id, paymentReference)
+                                                            val updated = order.copy(
+                                                                paymentStatus = "verification_required",
+                                                                paymentReference = paymentReference.trim(),
+                                                            )
+                                                            customerOrders = customerOrders.map { if (it.id == order.id) updated else it }
+                                                            activeOrder = updated
+                                                            paymentReference = ""
+                                                            try {
+                                                                customerOrders = QrDineApp.container.customer.orders()
+                                                                activeOrder = customerOrders.firstOrNull { it.id == order.id } ?: updated
+                                                            } catch (e: Exception) {
+                                                                Diagnostics.record(QrDineApp.appContext, e, "customer-orders-refresh")
+                                                                error = "Reference sent, but the latest order status could not be refreshed."
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            Diagnostics.record(QrDineApp.appContext, e, "customer-payment-reference")
+                                                            error = "Could not submit the payment reference. Please try again."
+                                                        } finally {
+                                                            orderBusy = false
+                                                        }
+                                                    }
+                                                },
+                                                enabled = paymentReference.trim().length >= 6 && !orderBusy,
+                                            ) { Text(if (order.paymentStatus == "awaiting_payment") "Submit payment reference" else "Update payment reference") }
+                                            Text(
+                                                "The restaurant verifies your UPI transfer before accepting the order.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (customerOrders.isNotEmpty()) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("Your recent orders", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        try {
+                                            customerOrders = QrDineApp.container.customer.orders()
+                                            error = null
+                                        } catch (e: Exception) {
+                                            Diagnostics.record(QrDineApp.appContext, e, "customer-orders-refresh")
+                                            error = "Could not refresh your order status. Please try again."
+                                        }
+                                    }
+                                }) { Text("Refresh") }
+                            }
+                            customerOrders.filter { it.restaurantId == restaurant.id }.take(5).forEach { order ->
+                                TextButton(onClick = { activeOrder = order }) {
+                                    Text("${order.id.take(8)} · ${order.status.uppercase()} · ${order.total.rupees()}")
+                                }
+                            }
                         }
                     }
                 }
@@ -355,6 +539,138 @@ fun CustomerAppScreen() {
             },
         )
     }
+    if (checkoutOpen && selectedRestaurant != null) {
+        OnlineCheckoutDialog(
+            profile = customerProfile,
+            restaurant = selectedRestaurant!!,
+            subtotal = cart.sumOf { it.qty * it.unitPrice },
+            busy = orderBusy,
+            error = error,
+            onDismiss = { checkoutOpen = false },
+            onSaveProfile = { profile ->
+                scope.launch {
+                    orderBusy = true
+                    try {
+                        QrDineApp.container.customer.saveProfile(profile)
+                        customerProfile = profile
+                        error = null
+                    } catch (e: Exception) {
+                        Diagnostics.record(QrDineApp.appContext, e, "customer-profile-save")
+                        error = "Could not save your profile. Check the phone, address, and PIN code."
+                    } finally {
+                        orderBusy = false
+                    }
+                }
+            },
+            onPlaceOrder = ::submitOrder,
+        )
+    }
+}
+
+@Composable
+private fun OnlineCheckoutDialog(
+    profile: OnlineCustomerProfile?,
+    restaurant: OnlineRestaurant,
+    subtotal: Int,
+    busy: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onSaveProfile: (OnlineCustomerProfile) -> Unit,
+    onPlaceOrder: (String, String) -> Unit,
+) {
+    var editingProfile by remember(profile) { mutableStateOf(profile == null) }
+    var fullName by remember(profile) { mutableStateOf(profile?.fullName.orEmpty()) }
+    var phone by remember(profile) { mutableStateOf(profile?.phone.orEmpty()) }
+    var address by remember(profile) { mutableStateOf(profile?.address.orEmpty()) }
+    var postalCode by remember(profile) { mutableStateOf(profile?.postalCode.orEmpty()) }
+    var fulfilment by remember(restaurant) {
+        mutableStateOf(if (restaurant.deliveryEnabled) "delivery" else "pickup")
+    }
+    var payment by remember(restaurant) {
+        mutableStateOf(if (restaurant.upiEnabled) "upi" else "cod")
+    }
+    val profileValid = fullName.trim().length in 2..80 &&
+        Regex("^(\\+91)?[6-9][0-9]{9}$").matches(phone.trim()) &&
+        address.trim().length in 5..250 && Regex("^[0-9]{6}$").matches(postalCode.trim())
+    val total = subtotal +
+        (if (fulfilment == "delivery") restaurant.deliveryFee else 0) +
+        (if (payment == "cod") restaurant.codFee else 0)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Checkout · ${restaurant.name}") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (editingProfile) {
+                    Text("Complete your customer profile before ordering.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(fullName, { fullName = it.take(80) }, label = { Text("Full name") }, singleLine = true)
+                    OutlinedTextField(phone, { phone = it.take(13) }, label = { Text("Mobile number") }, singleLine = true)
+                    OutlinedTextField(address, { address = it.take(250) }, label = { Text("Delivery address") }, minLines = 2)
+                    OutlinedTextField(postalCode, { postalCode = it.filter(Char::isDigit).take(6) }, label = { Text("PIN code") }, singleLine = true)
+                    Button(
+                        onClick = {
+                            onSaveProfile(OnlineCustomerProfile(fullName.trim(), phone.trim(), address.trim(), postalCode.trim()))
+                        },
+                        enabled = profileValid && !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Save customer profile") }
+                } else {
+                    Text("${profile?.fullName} · ${profile?.phone}", fontWeight = FontWeight.SemiBold)
+                    Text("${profile?.address}, ${profile?.postalCode}", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { editingProfile = true }) { Text("Edit profile") }
+                    Text("Fulfilment", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    if (restaurant.deliveryEnabled) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = fulfilment == "delivery", onClick = { fulfilment = "delivery" })
+                            Text("Delivery · ${restaurant.deliveryFee.rupees()}")
+                        }
+                    }
+                    if (restaurant.pickupEnabled) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = fulfilment == "pickup", onClick = { fulfilment = "pickup" })
+                            Text("Pickup")
+                        }
+                    }
+                    Text("Payment", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    if (restaurant.upiEnabled) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = payment == "upi", onClick = { payment = "upi" })
+                            Text("UPI — restaurant verifies payment")
+                        }
+                    }
+                    if (restaurant.codEnabled) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = payment == "cod", onClick = { payment = "cod" })
+                            Text("Cash on delivery · ${restaurant.codFee.rupees()}")
+                        }
+                    }
+                    HorizontalDivider()
+                    Text("Items ${subtotal.rupees()}")
+                    if (fulfilment == "delivery") Text("Delivery fee ${restaurant.deliveryFee.rupees()}")
+                    if (payment == "cod") Text("COD fee ${restaurant.codFee.rupees()}")
+                    Text("Total ${total.rupees()}", fontWeight = FontWeight.Bold)
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    if (payment == "upi") {
+                        Text(
+                            "After placing your order, pay using UPI and submit the transaction reference. The restaurant verifies the transfer before accepting.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Button(
+                        onClick = { onPlaceOrder(fulfilment, payment) },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (busy) "Placing order…" else "Place order") }
+                }
+                if (error != null && editingProfile) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
 }
 
 @Composable

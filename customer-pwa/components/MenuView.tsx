@@ -24,8 +24,8 @@ function Stepper({ qty, onAdd, onRemove, name, canAddMore }: { qty: number; onAd
 
 const hm = (v: string | null) => (v ?? "").slice(0, 5);
 
-export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onConfigure }: {
-  menu: Menu; lines: CartLine[]; onQuickAdd: (id: string) => void; onQuickRemove: (id: string) => void; onConfigure: (d: Dish) => void;
+export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onConfigure, onlineMode = false }: {
+  menu: Menu; lines: CartLine[]; onQuickAdd: (id: string) => void; onQuickRemove: (id: string) => void; onConfigure: (d: Dish) => void; onlineMode?: boolean;
 }) {
   const { t, pick } = useI18n();
   const [vegOnly, setVegOnly] = useState(false);
@@ -89,7 +89,7 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
           <ul>
             {dishes.map((d) => {
               const simple = isSimple(d);
-              const orderable = d.is_available && c.open_now && (d.stock_left === null || d.stock_left > 0);
+              const orderable = d.is_available && (!onlineMode || d.online_available !== false) && c.open_now && (d.stock_left === null || d.stock_left > 0);
               const qty = simple
                 ? (lines.find((l) => l.key === lineKey(d.id, null, [], ""))?.qty ?? 0)
                 : lines.filter((l) => l.dishId === d.id).reduce((n, l) => n + l.qty, 0);
@@ -110,7 +110,7 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
                   </div>
                   <div className="dish-side">
                     {d.image_url ? <img src={d.image_url} alt="" loading="lazy" width={96} height={96} referrerPolicy="no-referrer" /> : <div className="dish-noimg" />}
-                    {!orderable ? <span className="out-tag">{d.stock_left === 0 || !d.is_available ? t("soldOut") : t("notNow")}</span>
+                    {!orderable ? <span className="out-tag">{d.stock_left === 0 || !d.is_available ? t("soldOut") : onlineMode && d.online_available === false ? "Not available online" : t("notNow")}</span>
                       : simple ? <Stepper qty={qty} onAdd={() => onQuickAdd(d.id)} onRemove={() => onQuickRemove(d.id)} name={pick(d.name, d.name_i18n)} canAddMore={qty < 50 && (d.stock_left === null || qty < d.stock_left)} />
                       : <>
                           <button className="btn-add" disabled={d.stock_left !== null && qty >= d.stock_left} onClick={() => onConfigure(d)}>{t("add")}</button>

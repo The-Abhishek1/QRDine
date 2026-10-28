@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { CartLine } from "@/lib/cart";
 import { lineKey, unitPrice } from "@/lib/cart";
@@ -22,6 +22,25 @@ type OnlineRestaurant = {
   online_cod_enabled: boolean;
   online_cod_fee: number;
   online_upi_enabled: boolean;
+  upi_id?: string | null;
+};
+
+type CustomerProfile = { full_name: string; phone: string; address: string; postal_code: string };
+type OnlineOrder = {
+  id: string;
+  restaurant_id: string;
+  status: string;
+  fulfilment: string;
+  payment_method: string;
+  payment_status: string;
+  payment_reference: string | null;
+  subtotal: number;
+  delivery_fee: number;
+  cod_fee: number;
+  total: number;
+  items_snapshot: { name: string; qty: number; unit_price: number }[];
+  created_at: string;
+  reject_reason: string | null;
 };
 
 function rupees(paise: number) {
@@ -36,6 +55,16 @@ export default function CustomerExplore() {
   const [menuLoading, setMenuLoading] = useState(false);
   const [menuRetry, setMenuRetry] = useState(0);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [profile, setProfile] = useState<CustomerProfile | null>(null);
+  const [profileDraft, setProfileDraft] = useState<CustomerProfile>({ full_name: "", phone: "", address: "", postal_code: "" });
+  const [editingProfile, setEditingProfile] = useState(true);
+  const [orders, setOrders] = useState<OnlineOrder[]>([]);
+  const [fulfilment, setFulfilment] = useState<"delivery" | "pickup">("delivery");
+  const [paymentMethod, setPaymentMethod] = useState<"upi" | "cod">("upi");
+  const [activeOrder, setActiveOrder] = useState<OnlineOrder | null>(null);
+  const [orderBusy, setOrderBusy] = useState(false);
+  const clientOrderKeys = useRef(new Map<string, string>());
+  const [paymentReference, setPaymentReference] = useState("");
   const [configuring, setConfiguring] = useState<Dish | null>(null);
   const [search, setSearch] = useState("");
   const [name, setName] = useState("");
@@ -99,6 +128,28 @@ export default function CustomerExplore() {
   }, [session]);
 
   useEffect(() => {
+    if (!session) return;
+    let active = true;
+    const supabase = customerSupabase();
+    Promise.all([
+      supabase.rpc("get_customer_profile"),
+      supabase.rpc("customer_online_orders", { p_limit: 25 }),
+    ]).then(([profileResult, orderResult]) => {
+      if (!active) return;
+      if (profileResult.error) throw profileResult.error;
+      if (orderResult.error) throw orderResult.error;
+      const saved = profileResult.data as CustomerProfile | null;
+      setProfile(saved);
+      setProfileDraft(saved ?? { full_name: String(session.user.user_metadata.full_name ?? ""), phone: "", address: "", postal_code: "" });
+      setEditingProfile(!saved);
+      setOrders(Array.isArray(orderResult.data) ? orderResult.data as OnlineOrder[] : []);
+    }).catch(() => {
+      if (active) setError("Could not load your profile and orders. Please refresh and try again.");
+    });
+    return () => { active = false; };
+  }, [session]);
+
+  useEffect(() => {
     if (!session || !selectedRestaurant) return;
     let active = true;
     setMenuLoading(true);
@@ -119,6 +170,8 @@ export default function CustomerExplore() {
       }
       setSelectedRestaurant(result.restaurant);
       setMenu(result.menu);
+      setFulfilment(result.restaurant.online_delivery_enabled ? "delivery" : "pickup");
+      setPaymentMethod(result.restaurant.online_upi_enabled ? "upi" : "cod");
       setError(null);
     }).catch(() => {
       if (active) setError("Could not load this restaurant's menu. Please try again.");
@@ -213,6 +266,127 @@ export default function CustomerExplore() {
     return sum + (dish ? unitPrice(dish, line.variantId, line.addonIds) * line.qty : 0);
   }, 0);
   const i18n = useMemo(() => makeI18n("en"), []);
+  const profileComplete = !!profile?.full_name && !!profile.phone && !!profile.address && !!profile.postal_code;
+
+  async function saveCustomerProfile(event: FormEvent) {
+    event.preventDefault();
+    setOrderBusy(true);
+    setError(null);
+    try {
+      const { error: saveError } = await customerSupabase().rpc("save_customer_profile", {
+        p_full_name: profileDraft.full_name,
+        p_phone: profileDraft.phone,
+        p_address: profileDraft.address,
+        p_postal_code: profileDraft.postal_code,
+      });
+      if (saveError) throw saveError;
+      setProfile(profileDraft);
+      setEditingProfile(false);
+      setMessage("Profile saved. Your details are required for online orders.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your profile. Check the details and retry.");
+    } finally {
+      setOrderBusy(false);
+    }
+  }
+
+  async function placeOnlineOrder() {
+    if (!selectedRestaurant || !profileComplete || cart.length === 0) return;
+    setOrderBusy(true);
+    setError(null);
+    setMessage(null);
+    const clientKey = clientOrderKeys.current.get(selectedRestaurant.id) ?? crypto.randomUUID();
+    clientOrderKeys.current.set(selectedRestaurant.id, clientKey);
+    try {
+      const { data, error: placeError } = await customerSupabase().rpc("place_online_order", {
+        p_restaurant_id: selectedRestaurant.id,
+        p_client_key: clientKey,
+        p_fulfilment: fulfilment,
+        p_payment: paymentMethod,
+        p_note: "",
+        p_items: cart.map((line) => ({
+          dish_id: line.dishId, qty: line.qty, variant_id: line.variantId, addon_ids: line.addonIds, instructions: line.instructions,
+        })),
+      });
+      if (placeError) throw placeError;
+      const result = data as { order_id: string; total: number };
+      clientOrderKeys.current.delete(selectedRestaurant.id);
+      const createdOrder: OnlineOrder = {
+        id: result.order_id,
+        restaurant_id: selectedRestaurant.id,
+        status: "pending",
+        fulfilment,
+        payment_method: paymentMethod,
+        payment_status: paymentMethod === "upi" ? "awaiting_payment" : "cod_due",
+        payment_reference: null,
+        subtotal,
+        delivery_fee: fulfilment === "delivery" ? selectedRestaurant.online_delivery_fee : 0,
+        cod_fee: paymentMethod === "cod" ? selectedRestaurant.online_cod_fee : 0,
+        total: result.total,
+        items_snapshot: cart.map((line) => {
+          const dish = menu?.dishes.find((item) => item.id === line.dishId);
+          return {
+            name: dish?.name ?? "Item",
+            qty: line.qty,
+            unit_price: dish ? unitPrice(dish, line.variantId, line.addonIds) : 0,
+          };
+        }),
+        created_at: new Date().toISOString(),
+        reject_reason: null,
+      };
+      setActiveOrder(createdOrder);
+      setOrders((current) => [createdOrder, ...current.filter((order) => order.id !== createdOrder.id)]);
+      setCart([]);
+      setMessage(paymentMethod === "upi"
+        ? "Order created. Pay using UPI and submit the payment reference for restaurant verification."
+        : "Order placed. The restaurant will confirm it shortly.");
+      const { data: latest, error: latestError } = await customerSupabase().rpc("customer_online_orders", { p_limit: 25 });
+      if (latestError) {
+        setMessage("Order placed, but its latest status could not be refreshed. Use Refresh order status to check again.");
+        return;
+      }
+      const rows = Array.isArray(latest) ? latest as OnlineOrder[] : [];
+      setOrders(rows);
+      setActiveOrder(rows.find((order) => order.id === result.order_id) ?? createdOrder);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not place your order. Please check the menu and retry.");
+    } finally {
+      setOrderBusy(false);
+    }
+  }
+
+  async function submitPaymentReference(event: FormEvent) {
+    event.preventDefault();
+    if (!activeOrder) return;
+    setOrderBusy(true);
+    setError(null);
+    try {
+      const { error: paymentError } = await customerSupabase().rpc("submit_online_payment_reference", {
+        p_order_id: activeOrder.id,
+        p_reference: paymentReference.trim(),
+      });
+      if (paymentError) throw paymentError;
+      setActiveOrder({ ...activeOrder, payment_status: "verification_required", payment_reference: paymentReference.trim() });
+      setPaymentReference("");
+      setMessage("Payment reference sent. The restaurant must verify the transfer before accepting your order.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not submit the payment reference.");
+    } finally {
+      setOrderBusy(false);
+    }
+  }
+
+  async function refreshCustomerOrders() {
+    try {
+      const { data, error: ordersError } = await customerSupabase().rpc("customer_online_orders", { p_limit: 25 });
+      if (ordersError) throw ordersError;
+      const rows = Array.isArray(data) ? data as OnlineOrder[] : [];
+      setOrders(rows);
+      setActiveOrder((current) => current ? rows.find((order) => order.id === current.id) ?? current : null);
+    } catch {
+      setError("Could not refresh your order status. Please try again.");
+    }
+  }
 
   return (
     <I18nContext.Provider value={i18n}>
@@ -261,7 +435,7 @@ export default function CustomerExplore() {
               ) : menu ? (
                 <>
                   {menu.announcement && <p className="announce">{menu.announcement}</p>}
-                  <MenuView menu={menu} lines={cart} onQuickAdd={quickAdd} onQuickRemove={quickRemove} onConfigure={setConfiguring} />
+                  <MenuView menu={menu} lines={cart} onQuickAdd={quickAdd} onQuickRemove={quickRemove} onConfigure={setConfiguring} onlineMode />
                   {itemCount > 0 && (
                     <section className="online-cart" aria-label="Your selection">
                       <div><strong>{itemCount} {itemCount === 1 ? "item" : "items"}</strong><span> · {rupees(subtotal)}</span></div>
@@ -290,7 +464,79 @@ export default function CustomerExplore() {
                           );
                         })}
                       </ul>
-                      <small>Checkout and order placement will be available in the next stage.</small>
+                      <section className="online-checkout">
+                        <h3>Checkout</h3>
+                        {(!profileComplete || editingProfile) && (
+                          <div className="online-profile-required">
+                            <strong>Complete your customer profile before ordering.</strong>
+                            <form onSubmit={saveCustomerProfile}>
+                              <label>Full name<input required minLength={2} maxLength={80} value={profileDraft.full_name} onChange={(e) => setProfileDraft({ ...profileDraft, full_name: e.target.value })} /></label>
+                              <label>Mobile number<input required inputMode="tel" pattern="(\+91)?[6-9][0-9]{9}" value={profileDraft.phone} onChange={(e) => setProfileDraft({ ...profileDraft, phone: e.target.value })} /></label>
+                              <label>Address<input required minLength={5} maxLength={250} value={profileDraft.address} onChange={(e) => setProfileDraft({ ...profileDraft, address: e.target.value })} /></label>
+                              <label>PIN code<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={profileDraft.postal_code} onChange={(e) => setProfileDraft({ ...profileDraft, postal_code: e.target.value })} /></label>
+                              <button className="btn-outline" disabled={orderBusy}>Save profile</button>
+                            </form>
+                          </div>
+                        )}
+                        {profileComplete && (
+                          <>
+                            {!editingProfile && <button className="link" type="button" onClick={() => setEditingProfile(true)}>Edit customer profile</button>}
+                            <p>{profile.full_name} · {profile.phone} · {profile.address}, {profile.postal_code}</p>
+                            <div className="online-checkout-options">
+                              <label>Fulfilment
+                                <select value={fulfilment} onChange={(e) => setFulfilment(e.target.value as "delivery" | "pickup")}>
+                                  {selectedRestaurant.online_delivery_enabled && <option value="delivery">Delivery · {rupees(selectedRestaurant.online_delivery_fee)}</option>}
+                                  {selectedRestaurant.online_pickup_enabled && <option value="pickup">Pickup</option>}
+                                </select>
+                              </label>
+                              <label>Payment
+                                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as "upi" | "cod")}>
+                                  {selectedRestaurant.online_upi_enabled && <option value="upi">UPI (restaurant verifies payment)</option>}
+                                  {selectedRestaurant.online_cod_enabled && <option value="cod">Cash on delivery · {rupees(selectedRestaurant.online_cod_fee)}</option>}
+                                </select>
+                              </label>
+                            </div>
+                            <div className="online-total">
+                              <span>Items {rupees(subtotal)}</span>
+                              {fulfilment === "delivery" && <span>Delivery {rupees(selectedRestaurant.online_delivery_fee)}</span>}
+                              {paymentMethod === "cod" && <span>COD fee {rupees(selectedRestaurant.online_cod_fee)}</span>}
+                              <strong>Total {rupees(subtotal + (fulfilment === "delivery" ? selectedRestaurant.online_delivery_fee : 0) + (paymentMethod === "cod" ? selectedRestaurant.online_cod_fee : 0))}</strong>
+                            </div>
+                            {!editingProfile && <button className="btn-primary" type="button" onClick={() => void placeOnlineOrder()} disabled={orderBusy}>{orderBusy ? "Placing order…" : "Place order"}</button>}
+                          </>
+                        )}
+                      </section>
+                    </section>
+                  )}
+                  {message && <p className="marketplace-message" role="status">{message}</p>}
+                  {error && <p className="error" role="alert">{error}</p>}
+                  {activeOrder?.payment_method === "upi" && ["awaiting_payment", "verification_required"].includes(activeOrder.payment_status) && selectedRestaurant.upi_id && (
+                    <section className="online-payment">
+                      <h3>{activeOrder.payment_status === "awaiting_payment" ? "Pay by UPI" : "Payment reference submitted"}</h3>
+                      <p>Order total: {rupees(activeOrder.total)}</p>
+                      {activeOrder.payment_status === "awaiting_payment" && (
+                        <a className="btn-primary" href={`upi://pay?pa=${encodeURIComponent(selectedRestaurant.upi_id)}&pn=${encodeURIComponent(selectedRestaurant.name)}&am=${(activeOrder.total / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Online order ${activeOrder.id.slice(0, 8)}`)}`}>Open UPI app</a>
+                      )}
+                      <form onSubmit={submitPaymentReference}>
+                        <label>UPI transaction reference<input required minLength={6} maxLength={100} value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} /></label>
+                        <button className="btn-outline" disabled={orderBusy}>{activeOrder.payment_status === "awaiting_payment" ? "Submit reference for verification" : "Update payment reference"}</button>
+                      </form>
+                      <small>The restaurant verifies UPI before accepting the order.</small>
+                    </section>
+                  )}
+                  {orders.length > 0 && (
+                    <section className="online-order-history">
+                      <h3>Your online orders</h3>
+                      <button className="link" type="button" onClick={() => void refreshCustomerOrders()}>Refresh order status</button>
+                      {orders.filter((order) => order.restaurant_id === selectedRestaurant.id).map((order) => (
+                        <article key={order.id}>
+                          <button className="link" type="button" onClick={() => setActiveOrder(order)}>
+                            #{order.id.slice(0, 8)} · {order.status.replaceAll("_", " ")}
+                          </button>
+                          <span>{order.payment_method.toUpperCase()} · {order.payment_status.replaceAll("_", " ")} · {rupees(order.total)}</span>
+                          {order.reject_reason && <small>{order.reject_reason}</small>}
+                        </article>
+                      ))}
                     </section>
                   )}
                   {configuring && (

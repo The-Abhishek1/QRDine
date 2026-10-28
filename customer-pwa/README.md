@@ -15,16 +15,24 @@ session-ended screens. Cart survives reloads; double taps and bad networks never
 Bill with GST breakdown, Request bill only after everything is served, Pay with UPI button, thank-you and review after payment.
 Before launch add app icons to `app/manifest.ts` so it can be installed to the home screen.
 
-## Customer online ordering (in progress)
-`/explore` supports a separate customer account, lists restaurants that have enabled online orders, and lets
-customers browse menus, configure variants and optional/required add-ons, see active offers, and build a
-stock-limited local selection. This selection is not submitted as an order; checkout, delivery-area matching,
-and online order management are later stages.
+## Customer online ordering
+`/explore` is separate from table QR ordering. Customers sign in with a customer account, complete a profile
+(name, Indian mobile number, address, and PIN code), browse approved restaurants, and submit delivery or pickup
+orders with menu variants and add-ons. Restaurant owners submit an online-order application for platform-admin
+approval, configure fulfilment/payment settings, and can disable their online listing or individual dishes.
+Owners and waiters manage the resulting orders in the Android app.
+
+UPI orders require a customer-submitted transaction reference and manual restaurant verification; opening a UPI
+app does not verify or guarantee payment. COD starts disabled platform-wide. A platform admin must enable the
+global COD switch before restaurants can opt in; the restaurant and platform switches are both enforced when an
+order is placed.
 
 Set the public Supabase URL and anon key in `.env.local`, apply migrations
-`20261028000002_online_order_settings.sql` and `20261028000003_customer_accounts.sql`, and deploy the
-`online-restaurants` and `online-menu` Edge Functions. Ensure Supabase Authentication's custom access token
-hook is enabled for `public.custom_access_token_hook`. Never put a service-role key in the PWA.
+`20261028000002_online_order_settings.sql`, `20261028000003_customer_accounts.sql`, and
+`20261028000004_online_ordering.sql`, and deploy the `online-restaurants` and `online-menu` Edge Functions.
+Ensure Supabase Authentication's custom access token hook is enabled for `public.custom_access_token_hook`.
+Never put a service-role key in the PWA. Existing table QR ordering continues through `/t/<signed-token>` and is
+not replaced by `/explore`.
 
 ## M6 additions
 Sizes and extras with a pick-options sheet, special instructions per dish, "people also order" and bestseller badges, timed menu sections,

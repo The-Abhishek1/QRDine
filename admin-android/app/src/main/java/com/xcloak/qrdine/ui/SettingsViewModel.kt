@@ -23,6 +23,7 @@ data class SettingsUi(
     val restaurant: Restaurant? = null,
     val coupons: List<CouponRow> = emptyList(),
     val announcement: String = "",
+    val onlineCodAvailable: Boolean = false,
     val email: String? = null,
     val message: String? = null,
 )
@@ -41,6 +42,7 @@ class SettingsViewModel(private val restaurantId: String) : ViewModel() {
                     it.copy(
                         loading = false, restaurant = repo.restaurant(restaurantId), coupons = repo.coupons(restaurantId),
                         announcement = repo.todayAnnouncement()?.text.orEmpty(), email = repo.email(),
+                        onlineCodAvailable = repo.onlineCodAvailable(),
                     )
                 }
             } catch (e: Exception) {
@@ -100,6 +102,10 @@ class SettingsViewModel(private val restaurantId: String) : ViewModel() {
         codFeePaise: Int,
     ) = act("Online ordering settings saved") {
         repo.saveOnlineOrderSettings(it, enabled, delivery, pickup, upi, cod, deliveryFeePaise, codFeePaise)
+    }
+
+    fun submitOnlineApplication(note: String) = act("Application submitted for platform review") {
+        repo.submitOnlineApplication(note)
     }
 
     fun uploadLogo(context: Context, uri: Uri) = act("Photo updated") { rid ->

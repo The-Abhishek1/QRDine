@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TableRestaurant
 import androidx.compose.material3.*
@@ -51,6 +52,7 @@ private data class NavDef(val label: String, val icon: ImageVector)
 
 private val NAV = mapOf(
     "orders" to NavDef("Orders", Icons.Default.Notifications),
+    "online" to NavDef("Online", Icons.Default.ShoppingBag),
     "tables" to NavDef("Tables", Icons.Default.Home),
     "menu" to NavDef("Menu", Icons.AutoMirrored.Filled.List),
     "insights" to NavDef("Insights", Icons.Default.Star),
@@ -144,7 +146,11 @@ fun MainScreen(restaurantId: String, role: String) {
     if (showAddons && menuVm != null) { AddonGroupsScreen(menuVm, onBack = { showAddons = false }); return }
     if (showOffers && menuVm != null) { OffersScreen(menuVm, onBack = { showOffers = false }); return }
 
-    val tabs = if (role == "owner") listOf("orders", "tables", "menu", "insights", "settings") else listOf("orders", "tables", "settings")
+    val tabs = when (role) {
+        "owner" -> listOf("orders", "online", "tables", "menu", "insights", "settings")
+        "waiter" -> listOf("orders", "online", "tables", "settings")
+        else -> listOf("orders", "tables", "settings")
+    }
     val current = tabs[tab.coerceIn(0, tabs.lastIndex)]
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(current, lifecycleOwner, menuVm) {
@@ -197,6 +203,7 @@ fun MainScreen(restaurantId: String, role: String) {
     val screen: @Composable (@Composable () -> Unit) -> Unit = { b ->
         when (current) {
             "orders" -> OrdersScreen(bottomBar = b, onOpenBill = openBill, status = hotelStatus)
+            "online" -> OnlineOrdersScreen(bottomBar = b)
             "tables" -> TablesScreen(tablesVm, bottomBar = b, onOpenBill = openBill, canManage = role == "owner")
             "menu" -> if (menuVm != null) MenuHost(
                 menuVm, bottomBar = b,

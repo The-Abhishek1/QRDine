@@ -9,6 +9,7 @@ export type AddonGroup = { id: string; name: string; min_select: number; max_sel
 export type Dish = {
   id: string; category_id: string; name: string; description: string | null; image_url: string | null;
   base_price: number; original_price: number | null; is_veg: boolean; is_available: boolean; sort: number;
+  online_available?: boolean;
   name_i18n: I18n; description_i18n: I18n; stock_left: number | null;
   variants: Variant[]; addon_groups: AddonGroup[];
 };

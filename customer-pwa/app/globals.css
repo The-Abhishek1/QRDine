@@ -250,6 +250,19 @@ button:active { transform: scale(.98); }
 .online-cart-stepper { display: flex; flex: none; align-items: center; gap: 4px; }
 .online-cart-stepper button { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: inherit; font: inherit; }
 .online-cart-stepper button:disabled { opacity: .45; }
+.online-checkout, .online-payment, .online-profile-required, .online-order-history { display: grid; gap: 10px; margin-top: 12px; }
+.online-checkout h3, .online-payment h3, .online-order-history h3 { margin: 0; }
+.online-profile-required, .online-checkout, .online-payment { padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); }
+.online-profile-required form, .online-payment form { display: grid; gap: 9px; }
+.online-profile-required label, .online-payment label, .online-checkout-options label { display: grid; gap: 4px; font-weight: 600; }
+.online-profile-required input, .online-payment input, .online-checkout-options select { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: inherit; }
+.online-checkout p { margin: 0; color: var(--muted); }
+.online-checkout-options, .online-total { display: grid; gap: 9px; }
+.online-total { padding-top: 8px; border-top: 1px solid var(--line); }
+.online-total span, .online-total strong { display: flex; justify-content: space-between; }
+.online-payment small { color: var(--muted); }
+.online-order-history article { display: grid; gap: 3px; padding: 11px; border: 1px solid var(--line); border-radius: 12px; }
+.online-order-history article span, .online-order-history article small { color: var(--muted); }
 .marketplace-back { display: inline-block; margin-top: 24px; color: var(--peacock); font-weight: 600; }
 @media (max-width: 420px) { .marketplace-card { padding: 12px; } .marketplace-card > img { width: 52px; height: 52px; } }
 

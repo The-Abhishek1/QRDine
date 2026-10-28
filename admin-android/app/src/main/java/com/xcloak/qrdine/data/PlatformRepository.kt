@@ -21,6 +21,19 @@ class PlatformRepository(private val sb: SupabaseClient) {
 
     suspend fun summary(): PlatformSummary = sb.postgrest.rpc("platform_summary").decodeAs<PlatformSummary>()
     suspend fun hotels(): List<HotelRow> = sb.postgrest.rpc("platform_hotels").decodeAs<List<HotelRow>>()
+    suspend fun onlineApplications(): List<OnlineApplication> =
+        sb.postgrest.rpc("platform_online_applications").decodeAs<List<OnlineApplication>>()
+    suspend fun onlineCodAvailable(): Boolean = sb.postgrest.rpc("online_cod_available").decodeAs<Boolean>()
+    suspend fun setOnlineCodAvailable(enabled: Boolean) {
+        sb.postgrest.rpc("platform_set_online_cod", buildJsonObject { put("p_enabled", enabled) })
+    }
+    suspend fun reviewOnlineApplication(id: String, approve: Boolean, reason: String?) {
+        sb.postgrest.rpc("platform_review_online_application", buildJsonObject {
+            put("p_rid", id)
+            put("p_approve", approve)
+            if (!reason.isNullOrBlank()) put("p_reason", reason.trim())
+        })
+    }
     suspend fun payments(): List<PaymentRow> = sb.postgrest.rpc("platform_payments").decodeAs<List<PaymentRow>>()
     suspend fun support(): SupportInfo = sb.postgrest.rpc("platform_get_support").decodeAs<SupportInfo>()
     suspend fun activity(): List<ActivityRow> =

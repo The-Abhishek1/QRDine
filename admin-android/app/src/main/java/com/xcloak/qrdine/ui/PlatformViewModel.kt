@@ -7,6 +7,7 @@ import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.ActivityRow
 import com.xcloak.qrdine.data.AdminResult
 import com.xcloak.qrdine.data.HotelRow
+import com.xcloak.qrdine.data.OnlineApplication
 import com.xcloak.qrdine.data.DiagnosticReport
 import com.xcloak.qrdine.data.PaymentRow
 import com.xcloak.qrdine.data.PlatformSummary
@@ -24,6 +25,8 @@ data class PlatformUi(
     val busy: Boolean = false,
     val summary: PlatformSummary = PlatformSummary(),
     val hotels: List<HotelRow> = emptyList(),
+    val onlineApplications: List<OnlineApplication> = emptyList(),
+    val onlineCodAvailable: Boolean = false,
     val payments: List<PaymentRow> = emptyList(),
     val support: SupportInfo = SupportInfo(),
     val activity: List<ActivityRow> = emptyList(),
@@ -79,6 +82,7 @@ class PlatformViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         loading = false, summary = repo.summary(), hotels = repo.hotels(), payments = repo.payments(),
+                        onlineApplications = repo.onlineApplications(), onlineCodAvailable = repo.onlineCodAvailable(),
                         support = repo.support(), activity = repo.activity(), insights = runCatching { repo.insights() }.getOrNull(),
                         diagnostics = diagnosticsResult.getOrDefault(emptyList()),
                         diagnosticsUnavailable = diagnosticsResult.isFailure,
@@ -119,6 +123,13 @@ class PlatformViewModel : ViewModel() {
 
     fun approve(h: HotelRow, trialDays: Int) = act("${h.name} approved") { repo.review(h.id, true, null, trialDays) }
     fun reject(h: HotelRow, reason: String) = act("${h.name} rejected") { repo.review(h.id, false, reason, 0) }
+    fun reviewOnlineApplication(app: OnlineApplication, approve: Boolean, reason: String? = null) =
+        act(if (approve) "Online orders approved for ${app.name}" else "Online application rejected for ${app.name}") {
+            repo.reviewOnlineApplication(app.id, approve, reason)
+        }
+    fun setOnlineCodAvailable(enabled: Boolean) = act(
+        if (enabled) "Cash on delivery is now available to approved restaurants" else "Cash on delivery disabled platform-wide",
+    ) { repo.setOnlineCodAvailable(enabled) }
     fun hold(h: HotelRow, hold: Boolean, reason: String?) = act(if (hold) "${h.name} is on hold" else "Hold released") { repo.setHold(h.id, hold, reason) }
     fun update(h: HotelRow, name: String, phone: String, address: String, gstin: String, note: String) =
         act("Saved") { repo.updateHotel(h.id, name, phone, address, gstin, note) }

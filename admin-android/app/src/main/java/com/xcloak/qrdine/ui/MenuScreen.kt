@@ -271,7 +271,12 @@ fun MenuHost(
                                 if (reorder) {
                                     IconButton({ vm.moveDish(d, -1) }, enabled = idx > 0) { Icon(Icons.Default.KeyboardArrowUp, "Move up") }
                                     IconButton({ vm.moveDish(d, 1) }, enabled = idx < dishes.lastIndex) { Icon(Icons.Default.KeyboardArrowDown, "Move down") }
-                                } else Switch(checked = d.isAvailable, onCheckedChange = { vm.toggleAvailable(d) })
+                                } else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Menu", style = MaterialTheme.typography.labelSmall)
+                                    Switch(checked = d.isAvailable, onCheckedChange = { vm.toggleAvailable(d) })
+                                    Text("Online", style = MaterialTheme.typography.labelSmall)
+                                    Switch(checked = d.onlineAvailable, onCheckedChange = { vm.toggleOnlineAvailable(d) })
+                                }
                                 }
                             }
                         }

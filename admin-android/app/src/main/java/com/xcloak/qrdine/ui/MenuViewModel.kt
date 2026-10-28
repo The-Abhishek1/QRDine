@@ -275,7 +275,9 @@ class MenuViewModel(private val restaurantId: String) : ViewModel() {
                 _state.update { state ->
                     state.copy(
                         dishes = state.dishes.map { dish ->
-                            latest[dish.id]?.let { dish.copy(stockQty = it.stockQty, isAvailable = it.isAvailable) } ?: dish
+                            latest[dish.id]?.let {
+                                dish.copy(stockQty = it.stockQty, isAvailable = it.isAvailable, onlineAvailable = it.onlineAvailable)
+                            } ?: dish
                         },
                         stockError = null,
                         refreshingStock = false,
@@ -362,6 +364,23 @@ class MenuViewModel(private val restaurantId: String) : ViewModel() {
             try { repo.setAvailable(dish.id, !dish.isAvailable) }
             catch (e: Exception) {
                 Diagnostics.record(QrDineApp.appContext, e, "menu")
+                _state.update { it.copy(error = friendly(e)) }
+                refresh()
+            }
+        }
+    }
+
+    fun toggleOnlineAvailable(dish: Dish) {
+        _state.update { state ->
+            state.copy(dishes = state.dishes.map {
+                if (it.id == dish.id) it.copy(onlineAvailable = !dish.onlineAvailable) else it
+            })
+        }
+        viewModelScope.launch {
+            try {
+                repo.setOnlineAvailable(dish.id, !dish.onlineAvailable)
+            } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "menu-online-availability")
                 _state.update { it.copy(error = friendly(e)) }
                 refresh()
             }

@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.HotelRow
+import com.xcloak.qrdine.data.OnlineApplication
 import com.xcloak.qrdine.data.PaymentRow
 import java.time.LocalDate
 
@@ -76,6 +77,7 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
     var hotelId by rememberSaveable { mutableStateOf<String?>(null) }
     var hotelFilter by rememberSaveable { mutableStateOf("all") }
     var approveFor by remember { mutableStateOf<HotelRow?>(null) }
+    var rejectOnlineFor by remember { mutableStateOf<OnlineApplication?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var showPay by remember { mutableStateOf(false) }
 
@@ -119,7 +121,7 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
                     onFilter = { hotelFilter = it; tab = 1 })
                 tab == 1 -> HotelsTab(ui, hotelFilter, { hotelFilter = it }, onOpen = { hotelId = it }, onAdd = { showAdd = true }, onExport = { vm.exportHotels(context) })
                 tab == 2 -> PaymentsTab(ui, onRecord = { showPay = true }, onExport = { rows -> vm.exportPayments(context, rows) })
-                else -> PlatformSettingsTab(ui, vm)
+                else -> PlatformSettingsTab(ui, vm, onRejectApplication = { rejectOnlineFor = it })
             }
             if (ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         }
@@ -128,6 +130,12 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
     approveFor?.let { h -> ApproveDialog(h, { approveFor = null }) { days -> vm.approve(h, days) } }
     if (showAdd) AddHotelDialog({ showAdd = false }) { email, pw, name, phone, address, days -> vm.addHotel(email, pw, name, phone, address, days) }
     if (showPay) PaymentDialog(ui.hotels, null, { showPay = false }) { rid, amount, method, ref, months, date, note -> vm.recordPayment(rid, amount, method, ref, months, date, note) }
+    rejectOnlineFor?.let { app ->
+        ReasonDialog("Reject online ordering for ${app.name}", "Give the restaurant a reason and guidance for reapplying.", "Reject", true, { rejectOnlineFor = null }) { reason ->
+            vm.reviewOnlineApplication(app, false, reason)
+            rejectOnlineFor = null
+        }
+    }
 }
 
 @Composable
@@ -276,7 +284,11 @@ private fun actionLabel(a: String) = when (a) {
 }
 
 @Composable
-private fun PlatformSettingsTab(ui: PlatformUi, vm: PlatformViewModel) {
+private fun PlatformSettingsTab(
+    ui: PlatformUi,
+    vm: PlatformViewModel,
+    onRejectApplication: (OnlineApplication) -> Unit,
+) {
     val auth: AuthViewModel = viewModel()
     var phone by remember(ui.support) { mutableStateOf(ui.support.phone.orEmpty()) }
     var email by remember(ui.support) { mutableStateOf(ui.support.email.orEmpty()) }
@@ -294,6 +306,43 @@ private fun PlatformSettingsTab(ui: PlatformUi, vm: PlatformViewModel) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Keep support, receipts, and customer communications up to date.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ThemePreferenceCard()
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("ONLINE ORDERING APPLICATIONS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text("Review restaurant applications before their online listing can go live.", style = MaterialTheme.typography.bodySmall)
+            val pendingOnline = ui.onlineApplications.filter { it.status == "pending" }
+            if (pendingOnline.isEmpty()) Text("No online-order applications are waiting.", style = MaterialTheme.typography.bodySmall)
+            pendingOnline.forEach { application ->
+                HorizontalDivider()
+                Text(application.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                application.phone?.let { Text("Phone: $it", style = MaterialTheme.typography.bodySmall) }
+                application.address?.let { Text("Address: $it", style = MaterialTheme.typography.bodySmall) }
+                application.note?.takeIf(String::isNotBlank)?.let { Text("Details: $it", style = MaterialTheme.typography.bodySmall) }
+                Text("Submitted ${application.submittedAt?.let(::ago) ?: "recently"}", style = MaterialTheme.typography.labelSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button({ vm.reviewOnlineApplication(application, true) }, enabled = !ui.busy) { Text("Approve") }
+                    OutlinedButton({ onRejectApplication(application) }, enabled = !ui.busy) { Text("Reject") }
+                }
+            }
+        }
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("ONLINE ORDER ROLLOUT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text("Start with UPI. Enable this only when you are ready to roll out cash on delivery. Restaurants must also opt in individually.", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Allow cash on delivery", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (ui.onlineCodAvailable) "COD is available to restaurants that choose to enable it."
+                        else "COD is disabled across the platform; UPI remains the initial payment option.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = ui.onlineCodAvailable,
+                    onCheckedChange = vm::setOnlineCodAvailable,
+                    enabled = !ui.busy,
+                )
+            }
+        }
         GlassCard(Modifier.fillMaxWidth()) {
             Text("SIGNED IN AS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text(QrDineApp.container.auth.email() ?: "Account email unavailable", style = MaterialTheme.typography.bodyLarge)
