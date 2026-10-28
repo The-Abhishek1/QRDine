@@ -8,6 +8,7 @@ import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.SignInIdentityException
 import com.xcloak.qrdine.data.SignOutException
 import com.xcloak.qrdine.data.CustomerAccountRequiredException
+import com.xcloak.qrdine.data.CustomerRoleNotConfiguredException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,6 +58,8 @@ class AuthViewModel : ViewModel() {
                         }
                     } else if (e is CustomerAccountRequiredException) {
                         "That account is not a customer account. Use the restaurant sign-in option, or create a customer account."
+                    } else if (e is CustomerRoleNotConfiguredException) {
+                        "This customer account is valid, but customer access is not enabled on the backend yet. Please try again after the customer-account setup is deployed."
                     } else authError(e),
                 )
             }

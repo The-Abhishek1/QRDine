@@ -2,6 +2,7 @@ package com.xcloak.qrdine.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -93,70 +94,157 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
     var show by rememberSaveable { mutableStateOf(false) }
     var customerAccount by rememberSaveable { mutableStateOf(false) }
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    val colors = MaterialTheme.colorScheme
+    Surface(Modifier.fillMaxSize(), color = Color.Transparent) {
         Column(
             Modifier
                 .fillMaxSize()
                 .systemBarsPadding()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(horizontal = 22.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.Top),
+            horizontalAlignment = Alignment.Start,
         ) {
-            if (signUp && !forgotPassword) OnboardingStepsHero() else BrandMark(80)
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(if (customerAccount) "QR Dine" else "QR Dine Admin", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                BrandMark(54)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("QR Dine", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Restaurant tools and customer ordering", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(
                     when {
-                        forgotPassword -> "We'll email you a secure reset link"
-                        signUp && customerAccount -> "Create an account to find and order from restaurants"
-                        signUp -> "Create your account to get started"
-                        customerAccount -> "Sign in to discover restaurants and order"
-                        else -> "Sign in to manage your restaurant"
+                        forgotPassword -> "Reset your password"
+                        signUp && customerAccount -> "Create your customer account"
+                        signUp -> "Get your restaurant online"
+                        customerAccount -> "Order from your favourites"
+                        else -> "Welcome back"
                     },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    when {
+                        forgotPassword -> "We’ll send a secure reset link to the email on your account."
+                        signUp && customerAccount -> "Create an account to explore restaurants and place orders."
+                        signUp -> "Create an owner account, then add your restaurant details for review."
+                        customerAccount -> "Sign in to browse restaurants and track your orders."
+                        else -> "Sign in to manage your restaurant, menu, and orders."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
                 )
             }
 
+            if (!forgotPassword) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Choose how you use QR Dine", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Card(
+                            onClick = { customerAccount = false; vm.clearMessages() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = if (!customerAccount) colors.primaryContainer else colors.surfaceContainerLow),
+                            border = BorderStroke(1.dp, if (!customerAccount) colors.primary else colors.outlineVariant),
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Restaurant, null, tint = if (!customerAccount) colors.onPrimaryContainer else colors.onSurfaceVariant, modifier = Modifier.size(23.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Restaurant", style = MaterialTheme.typography.labelLarge)
+                                    Text("Owner or staff", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        Card(
+                            onClick = { customerAccount = true; vm.clearMessages() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = if (customerAccount) colors.primaryContainer else colors.surfaceContainerLow),
+                            border = BorderStroke(1.dp, if (customerAccount) colors.primary else colors.outlineVariant),
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.TableRestaurant, null, tint = if (customerAccount) colors.onPrimaryContainer else colors.onSurfaceVariant, modifier = Modifier.size(23.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Customer", style = MaterialTheme.typography.labelLarge)
+                                    Text("Browse and order", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             GlassCard(Modifier.fillMaxWidth()) {
+                    if (!forgotPassword) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(colors.surfaceContainerHigh)
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            listOf(false to "Sign in", true to "Create account").forEach { (createAccount, label) ->
+                                val selected = signUp == createAccount
+                                Surface(
+                                    onClick = { signUp = createAccount; vm.clearMessages() },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(11.dp),
+                                    color = if (selected) colors.surface else Color.Transparent,
+                                    shadowElevation = if (selected) 1.dp else 0.dp,
+                                ) {
+                                    Text(
+                                        label,
+                                        Modifier.padding(vertical = 11.dp),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (selected) colors.onSurface else colors.onSurfaceVariant,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    )
+                                }
+                            }
+                        }
+                    }
                     Text(
                         when {
-                            forgotPassword -> "PASSWORD RECOVERY"
-                            signUp && customerAccount -> "CREATE YOUR CUSTOMER ACCOUNT"
-                            signUp -> "CREATE YOUR RESTAURANT ACCOUNT"
-                            else -> "WELCOME BACK"
+                            forgotPassword -> "PASSWORD RESET"
+                            signUp && customerAccount -> "NEW CUSTOMER ACCOUNT"
+                            signUp -> "NEW RESTAURANT ACCOUNT"
+                            customerAccount -> "CUSTOMER SIGN IN"
+                            else -> "RESTAURANT SIGN IN"
                         },
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = colors.primary
                     )
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        label = { Text("Email") },
+                        label = { Text("Email address") },
+                        placeholder = { Text("you@example.com") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.medium
+                        shape = RoundedCornerShape(15.dp)
                     )
                     if (!forgotPassword) {
                         OutlinedTextField(
                             value = password,
                             onValueChange = { password = it },
-                            label = { Text("Password (8+ characters)") },
+                            label = { Text(if (signUp) "Create a password" else "Password") },
+                            supportingText = if (signUp) ({ Text("Use at least 8 characters.") }) else null,
                             singleLine = true,
                             visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = { TextButton({ show = !show }) { Text(if (show) "Hide" else "Show") } },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.medium
+                            shape = RoundedCornerShape(15.dp)
                         )
                     }
                     Messages(s)
                     if (s.verificationPending) {
                         OutlinedButton(
-                            onClick = { vm.resendConfirmation(email) },
+                            onClick = { vm.resendConfirmation(email.trim()) },
                             enabled = !s.loading,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -165,14 +253,12 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                     }
                     Button(
                         onClick = {
-                            if (forgotPassword) vm.requestPasswordReset(email)
-                            else vm.submit(email, password, signUp, customerAccount)
+                            if (forgotPassword) vm.requestPasswordReset(email.trim())
+                            else vm.submit(email.trim(), password, signUp, customerAccount)
                         },
                         enabled = !s.loading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = MaterialTheme.shapes.medium
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
+                        shape = RoundedCornerShape(15.dp)
                     ) {
                         if (s.loading) {
                             CircularProgressIndicator(
@@ -183,51 +269,43 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                         } else {
                             Text(
                                 when {
-                                    forgotPassword -> "Send reset link"
-                                    signUp -> "Create account"
-                                    else -> "Sign in"
+                                    forgotPassword -> "Email me a reset link"
+                                    signUp && customerAccount -> "Create customer account"
+                                    signUp -> "Create restaurant account"
+                                    customerAccount -> "Sign in as customer"
+                                    else -> "Sign in to restaurant"
                                 },
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
+                                fontSize = 15.sp
                             )
                         }
                     }
-                }
-
+            }
             if (forgotPassword) {
                 TextButton(
                     onClick = { forgotPassword = false; vm.clearMessages() },
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) { Text("Back to sign in") }
-            } else {
-                if (!signUp) {
-                    TextButton(
-                        onClick = { forgotPassword = true; vm.clearMessages() },
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) { Text("Forgot password?") }
-                }
-                TextButton(
-                    onClick = { signUp = !signUp; vm.clearMessages() },
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) {
-                    Text(
-                        when {
-                            customerAccount && signUp -> "Already have an account? Sign in"
-                            customerAccount -> "New customer? Create an account"
-                            signUp -> "Already have an account? Sign in"
-                            else -> "New restaurant? Create an account"
-                        },
-                    )
-                }
-                TextButton(
-                    onClick = { customerAccount = !customerAccount; signUp = false; forgotPassword = false; vm.clearMessages() },
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) {
-                    Text(if (customerAccount) "Restaurant owner or staff? Sign in" else "Ordering food? Customer sign in")
-                }
+                ) { Text("Back to sign in") }
+            } else if (!signUp) {
+                TextButton(
+                    onClick = { forgotPassword = true; vm.clearMessages() },
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) { Text("Forgot password?") }
+            } else {
+                Text(
+                    if (customerAccount) "Already have an account? Choose Sign in above."
+                    else "After creating your account, add your restaurant details for review.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 TextButton(onClick = { openLegalPage(context, "privacy") }) { Text("Privacy") }
+                Text("·", color = colors.onSurfaceVariant)
                 TextButton(onClick = { openLegalPage(context, "terms") }) { Text("Terms") }
             }
         }

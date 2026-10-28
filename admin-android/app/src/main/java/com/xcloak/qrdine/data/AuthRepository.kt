@@ -9,6 +9,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 const val AUTH_REDIRECT_URL = "qrdine://auth/callback"
@@ -22,6 +24,7 @@ class SignInIdentityException(val localSessionCleared: Boolean) :
     Exception("The authenticated account did not match the sign-in email.")
 
 class CustomerAccountRequiredException : Exception("Sign in with a customer account to browse restaurants.")
+class CustomerRoleNotConfiguredException : Exception("Customer access is not enabled for this project.")
 
 class AuthRepository(private val sb: SupabaseClient) {
     val status get() = sb.auth.sessionStatus
@@ -50,7 +53,10 @@ class AuthRepository(private val sb: SupabaseClient) {
         signIn(email, password)
         val token = sb.auth.currentAccessTokenOrNull()
         if (token?.let { Jwt.claim(it, "app_role") } != "customer") {
+            val isCustomerAccount = sb.auth.currentSessionOrNull()?.user?.userMetadata
+                ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
             sb.auth.clearSession()
+            if (isCustomerAccount) throw CustomerRoleNotConfiguredException()
             throw CustomerAccountRequiredException()
         }
     }

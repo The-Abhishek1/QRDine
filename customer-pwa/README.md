@@ -27,7 +27,11 @@ app does not verify or guarantee payment. COD starts disabled platform-wide. A p
 global COD switch before restaurants can opt in; the restaurant and platform switches are both enforced when an
 order is placed.
 
-Set the public Supabase URL and anon key in `.env.local`, apply migrations
+For local development, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
+For Vercel, add both as project Environment Variables for the production deployment and redeploy; the public
+anon key is required for customer authentication and must never be replaced with a service-role key.
+`NEXT_PUBLIC_SUPABASE_URL` can be inferred from `NEXT_PUBLIC_API_BASE` when that is already configured.
+Apply migrations
 `20261028000002_online_order_settings.sql`, `20261028000003_customer_accounts.sql`, and
 `20261028000004_online_ordering.sql`, and deploy the `online-restaurants` and `online-menu` Edge Functions.
 Ensure Supabase Authentication's custom access token hook is enabled for `public.custom_access_token_hook`.

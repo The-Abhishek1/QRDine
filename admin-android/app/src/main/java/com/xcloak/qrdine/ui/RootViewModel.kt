@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.Jwt
 import io.github.jan.supabase.auth.status.SessionStatus
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -31,9 +33,11 @@ class RootViewModel : ViewModel() {
                 val token = s.session.accessToken
                 val role = Jwt.claim(token, "app_role")
                 val rid = Jwt.claim(token, "restaurant_id")
+                val customerMetadata = s.session.user?.userMetadata
+                    ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
                 when {
                     role == "platform_admin" -> RootState.Platform
-                    role == "customer" -> RootState.Customer
+                    role == "customer" || customerMetadata -> RootState.Customer
                     (role == "owner" || role == "waiter" || role == "kitchen") && rid != null -> RootState.Ready(rid, role)
                     role == "owner_blocked" -> RootState.Blocked(Jwt.claim(token, "hotel_status") ?: "pending")
                     else -> RootState.NeedsRestaurant

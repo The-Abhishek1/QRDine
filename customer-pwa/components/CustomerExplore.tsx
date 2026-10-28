@@ -72,6 +72,8 @@ export default function CustomerExplore() {
   const [password, setPassword] = useState("");
   const [signUp, setSignUp] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [authConfigured, setAuthConfigured] = useState(false);
+  const [configurationError, setConfigurationError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,6 +82,7 @@ export default function CustomerExplore() {
     let unsubscribe = () => {};
     try {
       const supabase = customerSupabase();
+      setAuthConfigured(true);
       supabase.auth.getSession().then(({ data, error: sessionError }) => {
         if (!active) return;
         if (sessionError) setError("Could not check your sign-in. Please refresh and try again.");
@@ -103,7 +106,7 @@ export default function CustomerExplore() {
       });
       unsubscribe = () => data.subscription.unsubscribe();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Customer sign-in is not configured.");
+      setConfigurationError(e instanceof Error ? e.message : "Customer sign-in is not configured.");
       setLoading(false);
     }
     return () => { active = false; unsubscribe(); };
@@ -410,8 +413,9 @@ export default function CustomerExplore() {
           <label>Email<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <label>Password<input type="password" autoComplete={signUp ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} /></label>
           {message && <p className="marketplace-message" role="status">{message}</p>}
+          {configurationError && <p className="error" role="alert">{configurationError}</p>}
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="btn-primary" disabled={loading}>{loading ? "Please wait…" : signUp ? "Create account" : "Sign in"}</button>
+          <button className="btn-primary" disabled={loading || !authConfigured}>{loading ? "Please wait…" : signUp ? "Create account" : "Sign in"}</button>
           <button className="link" type="button" onClick={() => { setSignUp((value) => !value); setError(null); setMessage(null); }}>
             {signUp ? "Already have an account? Sign in" : "New to QR Dine? Create a customer account"}
           </button>
