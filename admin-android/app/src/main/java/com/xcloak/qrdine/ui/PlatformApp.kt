@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -99,7 +100,7 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(listOf("Dashboard", "Hotels", "Payments", "Settings")[tab], fontWeight = FontWeight.SemiBold) },
+                title = { Text(listOf("Dashboard", "Hotels", "Online orders", "Payments", "Settings")[tab], fontWeight = FontWeight.SemiBold) },
                 actions = { IconButton({ vm.refresh() }) { Icon(Icons.Default.Refresh, "Refresh") } },
             )
         },
@@ -109,8 +110,14 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
                     BadgedBox(badge = { if (ui.summary.pending > 0) Badge { Text("${ui.summary.pending}") } }) { Icon(Icons.Default.Home, null) }
                 }, label = { Text("Dashboard") })
                 NavigationBarItem(tab == 1, { tab = 1 }, icon = { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Hotels") })
-                NavigationBarItem(tab == 2, { tab = 2 }, icon = { Icon(Icons.Default.Done, null) }, label = { Text("Payments") })
-                NavigationBarItem(tab == 3, { tab = 3 }, icon = { Icon(Icons.Default.Settings, null) }, label = { Text("Settings") })
+                NavigationBarItem(tab == 2, { tab = 2 }, icon = {
+                    BadgedBox(badge = {
+                        val pendingApplications = ui.onlineApplications.count { it.status == "pending" }
+                        if (pendingApplications > 0) Badge { Text("$pendingApplications") }
+                    }) { Icon(Icons.Default.ShoppingCart, null) }
+                }, label = { Text("Online") })
+                NavigationBarItem(tab == 3, { tab = 3 }, icon = { Icon(Icons.Default.Done, null) }, label = { Text("Payments") })
+                NavigationBarItem(tab == 4, { tab = 4 }, icon = { Icon(Icons.Default.Settings, null) }, label = { Text("Settings") })
             }
         },
     ) { padding ->
@@ -120,8 +127,9 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
                 tab == 0 -> DashboardTab(ui, onOpen = { hotelId = it }, onApprove = { approveFor = it }, onAdd = { showAdd = true }, onPay = { showPay = true },
                     onFilter = { hotelFilter = it; tab = 1 })
                 tab == 1 -> HotelsTab(ui, hotelFilter, { hotelFilter = it }, onOpen = { hotelId = it }, onAdd = { showAdd = true }, onExport = { vm.exportHotels(context) })
-                tab == 2 -> PaymentsTab(ui, onRecord = { showPay = true }, onExport = { rows -> vm.exportPayments(context, rows) })
-                else -> PlatformSettingsTab(ui, vm, onRejectApplication = { rejectOnlineFor = it })
+                tab == 2 -> PlatformOnlineTab(ui, vm, onRejectApplication = { rejectOnlineFor = it })
+                tab == 3 -> PaymentsTab(ui, onRecord = { showPay = true }, onExport = { rows -> vm.exportPayments(context, rows) })
+                else -> PlatformSettingsTab(ui, vm)
             }
             if (ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         }
@@ -284,10 +292,91 @@ private fun actionLabel(a: String) = when (a) {
 }
 
 @Composable
-private fun PlatformSettingsTab(
+private fun PlatformOnlineTab(
     ui: PlatformUi,
     vm: PlatformViewModel,
     onRejectApplication: (OnlineApplication) -> Unit,
+) {
+    val pendingOnline = ui.onlineApplications.filter { it.status == "pending" }
+    val reviewedOnline = ui.onlineApplications.filter { it.status != "pending" }.sortedByDescending { it.submittedAt.orEmpty() }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            "Review restaurant requests before customer ordering is enabled. Approval allows a restaurant to configure and activate its online listing.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("RESTAURANT APPLICATIONS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(
+                if (pendingOnline.isEmpty()) "No online-order applications are waiting."
+                else "${pendingOnline.size} application${if (pendingOnline.size == 1) "" else "s"} waiting for review.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            pendingOnline.forEach { application ->
+                HorizontalDivider()
+                Text(application.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                application.phone?.let { Text("Phone: $it", style = MaterialTheme.typography.bodySmall) }
+                application.address?.let { Text("Address: $it", style = MaterialTheme.typography.bodySmall) }
+                application.note?.takeIf(String::isNotBlank)?.let { Text("Service details: $it", style = MaterialTheme.typography.bodySmall) }
+                Text("Submitted ${application.submittedAt?.let(::ago) ?: "recently"}", style = MaterialTheme.typography.labelSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { vm.reviewOnlineApplication(application, true) },
+                        enabled = !ui.busy,
+                    ) { Text("Approve online orders") }
+                    OutlinedButton(
+                        onClick = { onRejectApplication(application) },
+                        enabled = !ui.busy,
+                    ) { Text("Reject") }
+                }
+            }
+        }
+        if (reviewedOnline.isNotEmpty()) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("PREVIOUS DECISIONS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                reviewedOnline.take(10).forEach { application ->
+                    HorizontalDivider()
+                    Text(application.name, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (application.status == "approved") "Approved for customer online ordering"
+                        else "Rejected${application.review?.let { ": $it" }.orEmpty()}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("ONLINE ORDER ROLLOUT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(
+                "Start with UPI. Enable this only when you are ready to roll out cash on delivery. Restaurants must also opt in individually.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Allow cash on delivery", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (ui.onlineCodAvailable) "COD is available to restaurants that choose to enable it."
+                        else "COD is disabled across the platform; UPI remains the initial payment option.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = ui.onlineCodAvailable,
+                    onCheckedChange = vm::setOnlineCodAvailable,
+                    enabled = !ui.busy,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlatformSettingsTab(
+    ui: PlatformUi,
+    vm: PlatformViewModel,
 ) {
     val auth: AuthViewModel = viewModel()
     var phone by remember(ui.support) { mutableStateOf(ui.support.phone.orEmpty()) }
@@ -306,43 +395,6 @@ private fun PlatformSettingsTab(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Keep support, receipts, and customer communications up to date.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ThemePreferenceCard()
-        GlassCard(Modifier.fillMaxWidth()) {
-            Text("ONLINE ORDERING APPLICATIONS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Text("Review restaurant applications before their online listing can go live.", style = MaterialTheme.typography.bodySmall)
-            val pendingOnline = ui.onlineApplications.filter { it.status == "pending" }
-            if (pendingOnline.isEmpty()) Text("No online-order applications are waiting.", style = MaterialTheme.typography.bodySmall)
-            pendingOnline.forEach { application ->
-                HorizontalDivider()
-                Text(application.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                application.phone?.let { Text("Phone: $it", style = MaterialTheme.typography.bodySmall) }
-                application.address?.let { Text("Address: $it", style = MaterialTheme.typography.bodySmall) }
-                application.note?.takeIf(String::isNotBlank)?.let { Text("Details: $it", style = MaterialTheme.typography.bodySmall) }
-                Text("Submitted ${application.submittedAt?.let(::ago) ?: "recently"}", style = MaterialTheme.typography.labelSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button({ vm.reviewOnlineApplication(application, true) }, enabled = !ui.busy) { Text("Approve") }
-                    OutlinedButton({ onRejectApplication(application) }, enabled = !ui.busy) { Text("Reject") }
-                }
-            }
-        }
-        GlassCard(Modifier.fillMaxWidth()) {
-            Text("ONLINE ORDER ROLLOUT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Text("Start with UPI. Enable this only when you are ready to roll out cash on delivery. Restaurants must also opt in individually.", style = MaterialTheme.typography.bodySmall)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Allow cash on delivery", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (ui.onlineCodAvailable) "COD is available to restaurants that choose to enable it."
-                        else "COD is disabled across the platform; UPI remains the initial payment option.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Switch(
-                    checked = ui.onlineCodAvailable,
-                    onCheckedChange = vm::setOnlineCodAvailable,
-                    enabled = !ui.busy,
-                )
-            }
-        }
         GlassCard(Modifier.fillMaxWidth()) {
             Text("SIGNED IN AS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text(QrDineApp.container.auth.email() ?: "Account email unavailable", style = MaterialTheme.typography.bodyLarge)
