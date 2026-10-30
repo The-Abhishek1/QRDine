@@ -18,9 +18,14 @@ Deno.serve(handler(async (req) => {
     .eq("online_application_status", "approved")
     .eq("approval", "approved")
     .eq("on_hold", false)
+    .eq("online_orders_admin_hold", false)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!restaurant) throw new HttpError(404, "restaurant_unavailable");
+
+  const { data: serviceActive, error: serviceError } = await db.rpc("online_order_service_active", { p_rid: restaurantId });
+  if (serviceError) throw new Error(serviceError.message);
+  if (!serviceActive) throw new HttpError(404, "restaurant_unavailable");
 
   const { data: canTakeOrders, error: statusError } = await db.rpc("restaurant_can_take_orders", { p_rid: restaurantId });
   if (statusError) throw new Error(statusError.message);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { CartLine } from "@/lib/cart";
 import { lineKey, unitPrice } from "@/lib/cart";
+import { freeOfferQuantities } from "@/lib/offers";
 import { customerSupabase, hasCustomerRole, isCustomerAccount } from "@/lib/customerSupabase";
 import { I18nContext, makeI18n } from "@/lib/i18n";
 import type { Dish, Menu } from "@/lib/types";
@@ -38,7 +39,21 @@ type OnlineOrder = {
   delivery_fee: number;
   cod_fee: number;
   total: number;
-  items_snapshot: { name: string; qty: number; unit_price: number }[];
+  items_snapshot: {
+    dish_id?: string;
+    name: string;
+    qty: number;
+    unit_price: number;
+    variant_name?: string | null;
+    addons?: { id: string; name: string; price: number }[];
+    instructions?: string | null;
+    offer_free_qty?: number;
+  }[];
+  offer_discount: number;
+  eta_minutes: number | null;
+  accepted_at: string | null;
+  customer_rating: number | null;
+  customer_feedback: string | null;
   created_at: string;
   reject_reason: string | null;
 };
@@ -82,6 +97,8 @@ export default function CustomerExplore() {
   const [orderBusy, setOrderBusy] = useState(false);
   const clientOrderKeys = useRef(new Map<string, string>());
   const [paymentReference, setPaymentReference] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewFeedback, setReviewFeedback] = useState("");
   const [configuring, setConfiguring] = useState<Dish | null>(null);
   const [search, setSearch] = useState("");
   const [name, setName] = useState("");
@@ -330,8 +347,47 @@ export default function CustomerExplore() {
     const dish = menu?.dishes.find((item) => item.id === line.dishId);
     return sum + (dish ? unitPrice(dish, line.variantId, line.addonIds) * line.qty : 0);
   }, 0);
+  const offerFreeQuantities = useMemo(() => {
+    if (!menu) return new Map<string, number>();
+    return freeOfferQuantities(
+      cart.flatMap((line) => {
+        const dish = menu.dishes.find((item) => item.id === line.dishId);
+        return dish ? [{ line, dish, unit: unitPrice(dish, line.variantId, line.addonIds) }] : [];
+      }),
+      menu.offers,
+    );
+  }, [cart, menu]);
+  const offerDiscount = cart.reduce((sum, line) => {
+    const dish = menu?.dishes.find((item) => item.id === line.dishId);
+    return sum + (dish ? (offerFreeQuantities.get(line.key) ?? 0) * unitPrice(dish, line.variantId, line.addonIds) : 0);
+  }, 0);
+  const discountedSubtotal = Math.max(0, subtotal - offerDiscount);
   const i18n = useMemo(() => makeI18n("en"), []);
   const profileComplete = !!profile?.full_name && !!profile.phone && !!profile.address && !!profile.postal_code;
+
+  async function submitOnlineReview(event: FormEvent) {
+    event.preventDefault();
+    if (!activeOrder || activeOrder.status !== "completed" || activeOrder.customer_rating != null) return;
+    setOrderBusy(true);
+    setError(null);
+    try {
+      const { error: reviewError } = await customerSupabase().rpc("submit_online_order_review", {
+        p_order_id: activeOrder.id,
+        p_rating: reviewRating,
+        p_feedback: reviewFeedback.trim(),
+      });
+      if (reviewError) throw reviewError;
+      const reviewed = { ...activeOrder, customer_rating: reviewRating, customer_feedback: reviewFeedback.trim() || null };
+      setActiveOrder(reviewed);
+      setOrders((current) => current.map((order) => order.id === reviewed.id ? reviewed : order));
+      setMessage("Thanks for rating your order.");
+      setReviewFeedback("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not submit your feedback. Please try again.");
+    } finally {
+      setOrderBusy(false);
+    }
+  }
 
   async function saveCustomerProfile(event: FormEvent) {
     event.preventDefault();
@@ -402,8 +458,20 @@ export default function CustomerExplore() {
             name: dish?.name ?? "Item",
             qty: line.qty,
             unit_price: dish ? unitPrice(dish, line.variantId, line.addonIds) : 0,
+            dish_id: line.dishId,
+            variant_name: dish?.variants.find((variant) => variant.id === line.variantId)?.name ?? null,
+            addons: dish?.addon_groups.flatMap((group) => group.addons)
+              .filter((addon) => line.addonIds.includes(addon.id))
+              .map((addon) => ({ id: addon.id, name: addon.name, price: addon.price })) ?? [],
+            instructions: line.instructions || null,
+            offer_free_qty: offerFreeQuantities.get(line.key) ?? 0,
           };
         }),
+        offer_discount: offerDiscount,
+        eta_minutes: null,
+        accepted_at: null,
+        customer_rating: null,
+        customer_feedback: null,
         created_at: new Date().toISOString(),
         reject_reason: null,
       };
@@ -523,7 +591,10 @@ export default function CustomerExplore() {
                   <MenuView menu={menu} lines={cart} onQuickAdd={quickAdd} onQuickRemove={quickRemove} onConfigure={setConfiguring} onlineMode />
                   {itemCount > 0 && (
                     <section className="online-cart" aria-label="Your selection">
-                      <div><strong>{itemCount} {itemCount === 1 ? "item" : "items"}</strong><span> · {rupees(subtotal)}</span></div>
+                      <div>
+                        <strong>{itemCount} {itemCount === 1 ? "item" : "items"}</strong>
+                        <span> · {rupees(discountedSubtotal)}</span>
+                      </div>
                       <ul>
                         {cart.map((line) => {
                           const dish = menu.dishes.find((item) => item.id === line.dishId);
@@ -535,11 +606,13 @@ export default function CustomerExplore() {
                             group.addons.filter((addon) => line.addonIds.includes(addon.id)).map((addon) => addon.name),
                           );
                           const details = [variantName, ...addonNames, line.instructions && `Note: ${line.instructions}`].filter(Boolean).join(" · ");
+                          const freeQty = offerFreeQuantities.get(line.key) ?? 0;
                           return (
                             <li key={line.key}>
                               <span>
                                 {line.qty} × {dish.name} — {rupees(unitPrice(dish, line.variantId, line.addonIds))}
                                 {details && <small className="online-cart-details">{details}</small>}
+                                {freeQty > 0 && <small className="online-cart-offer">{freeQty} free with offer</small>}
                               </span>
                               <div className="online-cart-stepper" role="group" aria-label={`${dish.name} quantity`}>
                                 <button onClick={() => removeLine(line.key)} aria-label={`Remove one ${dish.name}`}>−</button>
@@ -583,9 +656,10 @@ export default function CustomerExplore() {
                             </div>
                             <div className="online-total">
                               <span>Items {rupees(subtotal)}</span>
+                              {offerDiscount > 0 && <span className="online-offer-discount">Offer discount −{rupees(offerDiscount)}</span>}
                               {fulfilment === "delivery" && <span>Delivery {rupees(selectedRestaurant.online_delivery_fee)}</span>}
                               {paymentMethod === "cod" && <span>COD fee {rupees(selectedRestaurant.online_cod_fee)}</span>}
-                              <strong>Total {rupees(subtotal + (fulfilment === "delivery" ? selectedRestaurant.online_delivery_fee : 0) + (paymentMethod === "cod" ? selectedRestaurant.online_cod_fee : 0))}</strong>
+                              <strong>Total {rupees(discountedSubtotal + (fulfilment === "delivery" ? selectedRestaurant.online_delivery_fee : 0) + (paymentMethod === "cod" ? selectedRestaurant.online_cod_fee : 0))}</strong>
                             </div>
                             {!editingProfile && <button className="btn-primary" type="button" onClick={() => void placeOnlineOrder()} disabled={orderBusy}>{orderBusy ? "Placing order…" : "Place order"}</button>}
                           </>
@@ -609,6 +683,41 @@ export default function CustomerExplore() {
                       <small>The restaurant verifies UPI before accepting the order.</small>
                     </section>
                   )}
+                  {activeOrder && (
+                    <section className="online-order-detail">
+                      <h3>Order #{activeOrder.id.slice(0, 8)} · {activeOrder.status.replaceAll("_", " ")}</h3>
+                      {activeOrder.status === "accepted" && activeOrder.eta_minutes != null && (
+                        <p className="online-order-eta">Accepted · estimated preparation time: {activeOrder.eta_minutes} minutes</p>
+                      )}
+                      {activeOrder.status === "completed" && <p>Your order is complete.</p>}
+                      {activeOrder.reject_reason && <p className="error">{activeOrder.reject_reason}</p>}
+                      <ul className="online-order-items">
+                        {activeOrder.items_snapshot.map((item, index) => (
+                          <li key={`${activeOrder.id}-${index}`}>
+                            <span>{item.qty} × {item.name}{item.variant_name ? ` · ${item.variant_name}` : ""}</span>
+                            <span>{rupees(item.unit_price * item.qty)}</span>
+                            {item.offer_free_qty ? <small>{item.offer_free_qty} free with offer</small> : null}
+                            {item.addons?.length ? <small>Add-ons: {item.addons.map((addon) => addon.name).join(", ")}</small> : null}
+                            {item.instructions && <small>Note: {item.instructions}</small>}
+                          </li>
+                        ))}
+                      </ul>
+                      {activeOrder.offer_discount > 0 && <p>Offer discount: −{rupees(activeOrder.offer_discount)}</p>}
+                      <p>Items {rupees(activeOrder.subtotal)} · Delivery {rupees(activeOrder.delivery_fee)} · COD {rupees(activeOrder.cod_fee)} · Total <strong>{rupees(activeOrder.total)}</strong></p>
+                      {activeOrder.status === "completed" && activeOrder.customer_rating == null && (
+                        <form onSubmit={submitOnlineReview} className="online-review-form">
+                          <label>Rate your order
+                            <select value={reviewRating} onChange={(event) => setReviewRating(Number(event.target.value))}>
+                              {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} star{rating === 1 ? "" : "s"}</option>)}
+                            </select>
+                          </label>
+                          <label>Feedback (optional)<textarea maxLength={500} value={reviewFeedback} onChange={(event) => setReviewFeedback(event.target.value)} /></label>
+                          <button className="btn-outline" disabled={orderBusy}>Submit rating</button>
+                        </form>
+                      )}
+                      {activeOrder.customer_rating != null && <p>Thanks for your rating: {"★".repeat(activeOrder.customer_rating)}{activeOrder.customer_feedback ? ` · ${activeOrder.customer_feedback}` : ""}</p>}
+                    </section>
+                  )}
                   {orders.length > 0 && (
                     <section className="online-order-history">
                       <h3>Your online orders</h3>
@@ -619,6 +728,16 @@ export default function CustomerExplore() {
                             #{order.id.slice(0, 8)} · {order.status.replaceAll("_", " ")}
                           </button>
                           <span>{order.payment_method.toUpperCase()} · {order.payment_status.replaceAll("_", " ")} · {rupees(order.total)}</span>
+                          <ul className="online-order-items">
+                            {order.items_snapshot.map((item, index) => (
+                              <li key={`${order.id}-${index}`}>
+                                <span>{item.qty} × {item.name}{item.variant_name ? ` · ${item.variant_name}` : ""}</span>
+                                {item.offer_free_qty ? <small>{item.offer_free_qty} free with offer</small> : null}
+                              </li>
+                            ))}
+                          </ul>
+                          {order.status === "accepted" && order.eta_minutes != null && <small>Estimated preparation time: {order.eta_minutes} minutes</small>}
+                          {order.offer_discount > 0 && <small>Offer discount −{rupees(order.offer_discount)}</small>}
                           {order.reject_reason && <small>{order.reject_reason}</small>}
                         </article>
                       ))}

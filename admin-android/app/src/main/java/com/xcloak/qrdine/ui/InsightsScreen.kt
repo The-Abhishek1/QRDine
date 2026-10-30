@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.InvoiceRow
+import com.xcloak.qrdine.data.OnlineOrderInsights
 import com.xcloak.qrdine.data.ReviewRow
 import com.xcloak.qrdine.data.Stats
 import kotlinx.coroutines.CancellationException
@@ -35,6 +36,7 @@ private enum class Range(val label: String) { TODAY("Today"), WEEK("7 days"), MO
 private data class Insights(
     val stats: Stats, val invoices: List<InvoiceRow>, val reviews: List<ReviewRow>, val days: List<LocalDate>,
     val restaurantName: String, val start: LocalDate, val end: LocalDate,
+    val onlineOrders: OnlineOrderInsights?, val onlineError: String?,
 )
 
 private fun startOf(r: Range, today: LocalDate, custom: LocalDate): LocalDate = when (r) {
@@ -88,9 +90,16 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
             val stats = owner.stats(from, to)
             val invoices = owner.invoices(from, to)
             val reviews = runCatching { owner.reviews() }.getOrDefault(emptyList())
+            val (onlineOrders, onlineError) = try {
+                owner.onlineOrderInsights(from, to) to null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null to (e.message ?: "Online-order sales are unavailable").take(160)
+            }
             val days = generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
             val name = runCatching { owner.restaurant(restaurantId).name }.getOrDefault("")
-            data = Insights(stats, invoices, reviews, days, name, start, end)
+            data = Insights(stats, invoices, reviews, days, name, start, end, onlineOrders, onlineError)
             error = null
         } catch (e: CancellationException) {
             throw e
@@ -136,6 +145,25 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
                     Kpi("Dishes sold", st.items.toString(), Modifier.weight(1f))
                 }
                 if (st.bills > 0) Text("Revenue includes ${st.tax.rupees()} GST (${(st.revenue - st.tax).rupees()} without it). Discounts given: ${st.discounts.rupees()}.", style = MaterialTheme.typography.bodySmall)
+
+                Section("Online sales (completed orders)") {
+                    if (d.onlineOrders == null) {
+                        Text("Online-order sales could not be loaded. Apply the latest online-ordering migration, then refresh Insights.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        d.onlineError?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    } else {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Online revenue", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(d.onlineOrders.sales.rupees(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text("Completed orders", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(d.onlineOrders.orders.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Text("${d.onlineOrders.items} dishes in completed online orders. Online revenue is shown separately from table bills.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
 
                 if (d.days.size > 1) {
                     Section("Revenue per day") {

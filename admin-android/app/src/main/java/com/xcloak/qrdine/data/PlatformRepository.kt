@@ -23,6 +23,30 @@ class PlatformRepository(private val sb: SupabaseClient) {
     suspend fun hotels(): List<HotelRow> = sb.postgrest.rpc("platform_hotels").decodeAs<List<HotelRow>>()
     suspend fun onlineApplications(): List<OnlineApplication> =
         sb.postgrest.rpc("platform_online_applications").decodeAs<List<OnlineApplication>>()
+    suspend fun onlineOrderMonthlyFee(): Int =
+        sb.postgrest.rpc("online_order_service_monthly_fee").decodeAs<Int>()
+    suspend fun onlineOrderPayments(): List<OnlineOrderServicePayment> =
+        sb.postgrest.rpc("platform_online_order_payments", buildJsonObject { put("p_limit", 50) })
+            .decodeAs<List<OnlineOrderServicePayment>>()
+    suspend fun setOnlineOrderMonthlyFee(amountPaise: Int) {
+        sb.postgrest.rpc("platform_set_online_order_monthly_fee", buildJsonObject { put("p_amount", amountPaise) })
+    }
+    suspend fun recordOnlineOrderPayment(rid: String, amountPaise: Int, months: Int, reference: String, note: String) {
+        sb.postgrest.rpc("platform_record_online_order_payment", buildJsonObject {
+            put("p_rid", rid)
+            put("p_amount", amountPaise)
+            put("p_months", months)
+            put("p_reference", reference)
+            put("p_note", note)
+        })
+    }
+    suspend fun setOnlineOrderHold(rid: String, hold: Boolean, reason: String?) {
+        sb.postgrest.rpc("platform_set_online_order_hold", buildJsonObject {
+            put("p_rid", rid)
+            put("p_hold", hold)
+            if (!reason.isNullOrBlank()) put("p_reason", reason.trim())
+        })
+    }
     suspend fun onlineCodAvailable(): Boolean = sb.postgrest.rpc("online_cod_available").decodeAs<Boolean>()
     suspend fun setOnlineCodAvailable(enabled: Boolean) {
         sb.postgrest.rpc("platform_set_online_cod", buildJsonObject { put("p_enabled", enabled) })

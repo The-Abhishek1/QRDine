@@ -8,6 +8,7 @@ import com.xcloak.qrdine.data.ActivityRow
 import com.xcloak.qrdine.data.AdminResult
 import com.xcloak.qrdine.data.HotelRow
 import com.xcloak.qrdine.data.OnlineApplication
+import com.xcloak.qrdine.data.OnlineOrderServicePayment
 import com.xcloak.qrdine.data.DiagnosticReport
 import com.xcloak.qrdine.data.PaymentRow
 import com.xcloak.qrdine.data.PlatformSummary
@@ -26,6 +27,9 @@ data class PlatformUi(
     val summary: PlatformSummary = PlatformSummary(),
     val hotels: List<HotelRow> = emptyList(),
     val onlineApplications: List<OnlineApplication> = emptyList(),
+    val onlineOrderMonthlyFee: Int = 0,
+    val onlineOrderPayments: List<OnlineOrderServicePayment> = emptyList(),
+    val onlineBillingUnavailable: Boolean = false,
     val onlineCodAvailable: Boolean = false,
     val payments: List<PaymentRow> = emptyList(),
     val support: SupportInfo = SupportInfo(),
@@ -60,6 +64,10 @@ class PlatformViewModel : ViewModel() {
             "bad_months" in m -> "Months must be between 1 and 36."
             "bad_dates" in m -> "Enter valid dates."
             "payment_not_found" in m -> "That payment no longer exists."
+            "bad_online_order_fee" in m -> "Monthly fee must be between ₹0 and ₹10,000."
+            "online_order_fee_not_configured" in m -> "Set a monthly fee before recording a payment."
+            "online_order_payment_insufficient" in m -> "The payment must cover the selected number of months."
+            "online_application_required" in m -> "Approve the restaurant's online-order application first."
             else -> m.take(160)
         }
     }
@@ -79,11 +87,17 @@ class PlatformViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val diagnosticsResult = runCatching { repo.diagnostics() }
+                val onlineBillingResult = runCatching {
+                    repo.onlineOrderMonthlyFee() to repo.onlineOrderPayments()
+                }
                 _state.update {
                     it.copy(
                         loading = false, summary = repo.summary(), hotels = repo.hotels(), payments = repo.payments(),
                         onlineApplications = repo.onlineApplications(), onlineCodAvailable = repo.onlineCodAvailable(),
                         support = repo.support(), activity = repo.activity(), insights = runCatching { repo.insights() }.getOrNull(),
+                        onlineOrderMonthlyFee = onlineBillingResult.getOrNull()?.first ?: 0,
+                        onlineOrderPayments = onlineBillingResult.getOrNull()?.second.orEmpty(),
+                        onlineBillingUnavailable = onlineBillingResult.isFailure,
                         diagnostics = diagnosticsResult.getOrDefault(emptyList()),
                         diagnosticsUnavailable = diagnosticsResult.isFailure,
                     )
@@ -130,6 +144,17 @@ class PlatformViewModel : ViewModel() {
     fun setOnlineCodAvailable(enabled: Boolean) = act(
         if (enabled) "Cash on delivery is now available to approved restaurants" else "Cash on delivery disabled platform-wide",
     ) { repo.setOnlineCodAvailable(enabled) }
+    fun setOnlineOrderMonthlyFee(amountPaise: Int) = act("Online-order monthly fee updated") {
+        repo.setOnlineOrderMonthlyFee(amountPaise)
+    }
+    fun recordOnlineOrderPayment(rid: String, amountPaise: Int, months: Int, reference: String, note: String) =
+        act("Online-order payment recorded") {
+            repo.recordOnlineOrderPayment(rid, amountPaise, months, reference, note)
+        }
+    fun setOnlineOrderHold(app: OnlineApplication, hold: Boolean, reason: String? = null) =
+        act(if (hold) "Online orders held for ${app.name}" else "Online-order hold released for ${app.name}") {
+            repo.setOnlineOrderHold(app.id, hold, reason)
+        }
     fun hold(h: HotelRow, hold: Boolean, reason: String?) = act(if (hold) "${h.name} is on hold" else "Hold released") { repo.setHold(h.id, hold, reason) }
     fun update(h: HotelRow, name: String, phone: String, address: String, gstin: String, note: String) =
         act("Saved") { repo.updateHotel(h.id, name, phone, address, gstin, note) }

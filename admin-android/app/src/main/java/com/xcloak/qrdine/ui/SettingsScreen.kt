@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -183,7 +182,7 @@ private fun Home(r: Restaurant, status: HotelStatus?, role: String, onOpen: (Str
         sections.forEach { (heading, items) ->
             Text(heading, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             items.forEach { (key, title, subtitle) ->
-                GlassCard(Modifier.fillMaxWidth().clickable { onOpen(key) }) {
+                GlassCard(Modifier.fillMaxWidth(), onClick = { onOpen(key) }) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -340,8 +339,17 @@ private fun OnlineOrdersPage(r: Restaurant, codAvailable: Boolean, busy: Boolean
                 modifier = Modifier.fillMaxWidth(),
             )
             Button(
-                onClick = { vm.submitOnlineApplication(applicationNote) },
-                enabled = !busy && r.phone?.isNotBlank() == true && r.address?.isNotBlank() == true && (delivery || pickup),
+                onClick = {
+                    vm.submitOnlineApplication(
+                        applicationNote,
+                        delivery,
+                        pickup,
+                        deliveryFeePaise ?: r.onlineDeliveryFee,
+                        codFeePaise ?: r.onlineCodFee,
+                    )
+                },
+                enabled = !busy && r.phone?.isNotBlank() == true && r.address?.isNotBlank() == true &&
+                    (delivery || pickup) && feeError == null,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Submit online-order application") }
             if (r.phone.isNullOrBlank() || r.address.isNullOrBlank() || (!delivery && !pickup)) {

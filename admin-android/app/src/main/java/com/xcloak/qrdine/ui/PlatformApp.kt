@@ -79,6 +79,8 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
     var hotelFilter by rememberSaveable { mutableStateOf("all") }
     var approveFor by remember { mutableStateOf<HotelRow?>(null) }
     var rejectOnlineFor by remember { mutableStateOf<OnlineApplication?>(null) }
+    var holdOnlineFor by remember { mutableStateOf<OnlineApplication?>(null) }
+    var onlinePaymentFor by remember { mutableStateOf<OnlineApplication?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var showPay by remember { mutableStateOf(false) }
 
@@ -127,7 +129,12 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
                 tab == 0 -> DashboardTab(ui, onOpen = { hotelId = it }, onApprove = { approveFor = it }, onAdd = { showAdd = true }, onPay = { showPay = true },
                     onFilter = { hotelFilter = it; tab = 1 })
                 tab == 1 -> HotelsTab(ui, hotelFilter, { hotelFilter = it }, onOpen = { hotelId = it }, onAdd = { showAdd = true }, onExport = { vm.exportHotels(context) })
-                tab == 2 -> PlatformOnlineTab(ui, vm, onRejectApplication = { rejectOnlineFor = it })
+                tab == 2 -> PlatformOnlineTab(
+                    ui, vm,
+                    onRejectApplication = { rejectOnlineFor = it },
+                    onHoldApplication = { holdOnlineFor = it },
+                    onRecordPayment = { onlinePaymentFor = it },
+                )
                 tab == 3 -> PaymentsTab(ui, onRecord = { showPay = true }, onExport = { rows -> vm.exportPayments(context, rows) })
                 else -> PlatformSettingsTab(ui, vm)
             }
@@ -142,6 +149,18 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
         ReasonDialog("Reject online ordering for ${app.name}", "Give the restaurant a reason and guidance for reapplying.", "Reject", true, { rejectOnlineFor = null }) { reason ->
             vm.reviewOnlineApplication(app, false, reason)
             rejectOnlineFor = null
+        }
+    }
+    holdOnlineFor?.let { app ->
+        ReasonDialog("Hold online orders for ${app.name}", "Customers will no longer be able to place online orders. The restaurant's table service is unaffected.", "Place on hold", false, { holdOnlineFor = null }) { reason ->
+            vm.setOnlineOrderHold(app, true, reason)
+            holdOnlineFor = null
+        }
+    }
+    onlinePaymentFor?.let { app ->
+        OnlineOrderPaymentDialog(app, ui.onlineOrderMonthlyFee, { onlinePaymentFor = null }) { months, reference, note ->
+            vm.recordOnlineOrderPayment(app.id, ui.onlineOrderMonthlyFee * months, months, reference, note)
+            onlinePaymentFor = null
         }
     }
 }
@@ -296,13 +315,46 @@ private fun PlatformOnlineTab(
     ui: PlatformUi,
     vm: PlatformViewModel,
     onRejectApplication: (OnlineApplication) -> Unit,
+    onHoldApplication: (OnlineApplication) -> Unit,
+    onRecordPayment: (OnlineApplication) -> Unit,
 ) {
     val pendingOnline = ui.onlineApplications.filter { it.status == "pending" }
     val reviewedOnline = ui.onlineApplications.filter { it.status != "pending" }.sortedByDescending { it.submittedAt.orEmpty() }
+    val approvedOnline = ui.onlineApplications.filter { it.status == "approved" }
+    var feeText by remember(ui.onlineOrderMonthlyFee) {
+        mutableStateOf("%.2f".format(java.util.Locale.US, ui.onlineOrderMonthlyFee / 100.0))
+    }
+    val feePaise = rupeesToPaise(feeText)?.takeIf { it in 0..1_000_000 }?.toInt()
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("ONLINE-ORDER MONTHLY FEE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(
+                if (ui.onlineOrderMonthlyFee == 0) "No monthly fee is configured; payment gating is off."
+                else "Restaurants must have a recorded payment to accept customer online orders.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (ui.onlineBillingUnavailable) {
+                Text("Online billing is unavailable. Apply the latest online-service billing migration, then refresh.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedTextField(
+                feeText,
+                { feeText = it.filter { char -> char.isDigit() || char == '.' }.take(9) },
+                label = { Text("Monthly fee (₹)") },
+                singleLine = true,
+                isError = feePaise == null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = { feePaise?.let(vm::setOnlineOrderMonthlyFee) },
+                enabled = !ui.busy && !ui.onlineBillingUnavailable && feePaise != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Save monthly fee") }
+        }
+
         Text(
             "Review restaurant requests before customer ordering is enabled. Approval allows a restaurant to configure and activate its online listing.",
             style = MaterialTheme.typography.bodyMedium,
@@ -331,6 +383,49 @@ private fun PlatformOnlineTab(
                         onClick = { onRejectApplication(application) },
                         enabled = !ui.busy,
                     ) { Text("Reject") }
+                }
+            }
+        }
+        if (approvedOnline.isNotEmpty()) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("APPROVED ONLINE RESTAURANTS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                approvedOnline.forEach { application ->
+                    HorizontalDivider()
+                    Text(application.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        buildString {
+                            append(if (application.ordersEnabled) "Listing enabled" else "Listing disabled")
+                            append(" · ")
+                            append(application.paidThrough?.let { "Paid through ${it.take(10)}" } ?: "No fee payment recorded")
+                            if (application.adminHold) append(" · On hold")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    application.adminHoldReason?.takeIf(String::isNotBlank)?.let {
+                        Text("Hold reason: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (ui.onlineOrderMonthlyFee > 0) {
+                            OutlinedButton(
+                                onClick = { onRecordPayment(application) },
+                                enabled = !ui.busy && !ui.onlineBillingUnavailable,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Record payment") }
+                        }
+                        if (application.adminHold) {
+                            Button(
+                                onClick = { vm.setOnlineOrderHold(application, false) },
+                                enabled = !ui.busy,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Release hold") }
+                        } else {
+                            OutlinedButton(
+                                onClick = { onHoldApplication(application) },
+                                enabled = !ui.busy,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Hold online orders") }
+                        }
+                    }
                 }
             }
         }
@@ -368,6 +463,20 @@ private fun PlatformOnlineTab(
                     onCheckedChange = vm::setOnlineCodAvailable,
                     enabled = !ui.busy,
                 )
+            }
+        }
+        if (ui.onlineOrderPayments.isNotEmpty()) {
+            val restaurantNames = ui.onlineApplications.associate { it.id to it.name }
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("ONLINE-ORDER PAYMENT HISTORY", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                ui.onlineOrderPayments.forEach { payment ->
+                    HorizontalDivider()
+                    Text(restaurantNames[payment.restaurantId] ?: "Restaurant", fontWeight = FontWeight.SemiBold)
+                    Text("${payment.amount.toLong().rupees()} · ${payment.months} month${if (payment.months == 1) "" else "s"} · ${payment.paidOn}", style = MaterialTheme.typography.bodySmall)
+                    Text("Coverage ${payment.periodStart} to ${payment.periodEnd}", style = MaterialTheme.typography.bodySmall)
+                    payment.reference?.takeIf(String::isNotBlank)?.let { Text("Reference: $it", style = MaterialTheme.typography.bodySmall) }
+                    payment.note?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
             }
         }
     }

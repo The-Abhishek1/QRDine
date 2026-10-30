@@ -61,6 +61,10 @@ class SettingsViewModel(private val restaurantId: String) : ViewModel() {
     private fun friendly(e: Exception): String {
         val m = e.message ?: return "Something went wrong"
         return when {
+            "application_details_required" in m -> "Add your restaurant phone number and address, and select delivery or pickup before applying."
+            "application_pending" in m -> "Your online-order application is already waiting for platform-admin review."
+            "application_already_approved" in m -> "Your restaurant is already approved for online ordering."
+            "not_owner" in m -> "Only the restaurant owner can submit the online-order application."
             "duplicate key" in m -> "That already exists."
             "gstin" in m && "check" in m -> "A GSTIN has exactly 15 characters."
             "weak" in m.lowercase() || "password" in m.lowercase() -> m.take(160)
@@ -104,8 +108,14 @@ class SettingsViewModel(private val restaurantId: String) : ViewModel() {
         repo.saveOnlineOrderSettings(it, enabled, delivery, pickup, upi, cod, deliveryFeePaise, codFeePaise)
     }
 
-    fun submitOnlineApplication(note: String) = act("Application submitted for platform review") {
-        repo.submitOnlineApplication(note)
+    fun submitOnlineApplication(
+        note: String,
+        delivery: Boolean,
+        pickup: Boolean,
+        deliveryFeePaise: Int,
+        codFeePaise: Int,
+    ) = act("Application submitted for platform review") {
+        repo.submitOnlineApplication(it, note, delivery, pickup, deliveryFeePaise, codFeePaise)
     }
 
     fun uploadLogo(context: Context, uri: Uri) = act("Photo updated") { rid ->

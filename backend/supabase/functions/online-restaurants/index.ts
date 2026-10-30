@@ -15,11 +15,15 @@ Deno.serve(handler(async (req) => {
     .eq("online_application_status", "approved")
     .eq("approval", "approved")
     .eq("on_hold", false)
+    .eq("online_orders_admin_hold", false)
     .order("name");
   if (error) throw new Error(error.message);
 
   const available = [];
   for (const restaurant of candidates ?? []) {
+    const { data: serviceActive, error: serviceError } = await db.rpc("online_order_service_active", { p_rid: restaurant.id });
+    if (serviceError) throw new Error(serviceError.message);
+    if (!serviceActive) continue;
     const { data: canTakeOrders, error: statusError } = await db.rpc("restaurant_can_take_orders", { p_rid: restaurant.id });
     if (statusError) throw new Error(statusError.message);
     if (canTakeOrders) available.push({

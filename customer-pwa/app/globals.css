@@ -36,6 +36,17 @@ button { cursor: pointer; }
 .offer-card { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--haldi); border-radius: var(--radius); background: var(--card); }
 .offer-card small { color: var(--muted); }
 .tools input[type=search] { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+.online-menu-page .tools,
+.online-menu-page .cats {
+  position: static;
+  top: auto;
+  z-index: auto;
+  margin: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+.online-menu-page .tools { padding: 10px 0; }
+.online-menu-page .cats { padding: 6px 0 10px; }
 .chip-toggle input { position: absolute; opacity: 0; }
 .chip-toggle span { display: inline-flex; align-items: center; gap: 6px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); white-space: nowrap; }
 .chip-toggle input:checked + span { border-color: var(--leaf); box-shadow: inset 0 0 0 1px var(--leaf); }

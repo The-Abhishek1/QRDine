@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -161,6 +162,9 @@ fun MenuHost(
                 title = { Text(s.restaurantName.ifBlank { "Menu" }, fontWeight = FontWeight.SemiBold) },
                 actions = {
                     if (reorder) TextButton({ reorder = false }) { Text("Done") }
+                    IconButton(onClick = { vm.refresh() }, enabled = !s.loading) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh menu")
+                    }
                     IconButton({ menuOpen = true }) { Icon(Icons.Default.MoreVert, "More") }
                     DropdownMenu(menuOpen, { menuOpen = false }) {
                         DropdownMenuItem(text = { Text("Add category") }, onClick = { menuOpen = false; categoryDialog = true })

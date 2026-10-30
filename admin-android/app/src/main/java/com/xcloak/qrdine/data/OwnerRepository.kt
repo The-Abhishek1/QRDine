@@ -77,6 +77,12 @@ class OwnerRepository(private val sb: SupabaseClient) {
     suspend fun stats(fromIso: String, toIso: String): Stats =
         sb.postgrest.rpc("owner_stats", buildJsonObject { put("p_from", fromIso); put("p_to", toIso) }).decodeAs<Stats>()
 
+    suspend fun onlineOrderInsights(fromIso: String, toIso: String): OnlineOrderInsights =
+        sb.postgrest.rpc("restaurant_online_order_insights", buildJsonObject {
+            put("p_from", fromIso)
+            put("p_to", toIso)
+        }).decodeAs<OnlineOrderInsights>()
+
     suspend fun reviews(): List<ReviewRow> =
         sb.from("reviews").select().decodeList<ReviewRow>().sortedByDescending { it.createdAt }
 
@@ -135,7 +141,20 @@ class OwnerRepository(private val sb: SupabaseClient) {
         })
     }
 
-    suspend fun submitOnlineApplication(note: String) {
+    suspend fun submitOnlineApplication(
+        restaurantId: String,
+        note: String,
+        delivery: Boolean,
+        pickup: Boolean,
+        deliveryFeePaise: Int,
+        codFeePaise: Int,
+    ) {
+        sb.from("restaurants").update({
+            set("online_delivery_enabled", delivery)
+            set("online_pickup_enabled", pickup)
+            set("online_delivery_fee", deliveryFeePaise)
+            set("online_cod_fee", codFeePaise)
+        }) { filter { eq("id", restaurantId) } }
         sb.postgrest.rpc("submit_online_application", buildJsonObject {
             if (note.isNotBlank()) put("p_note", note.trim())
         })

@@ -9,6 +9,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.xcloak.qrdine.data.HotelRow
+import com.xcloak.qrdine.data.OnlineApplication
 import java.time.LocalDate
 
 private val num = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -113,6 +114,56 @@ fun PaymentDialog(hotels: List<HotelRow>, fixed: HotelRow?, onDismiss: () -> Uni
         },
         confirmButton = {
             TextButton(enabled = valid, onClick = { onConfirm(hotel!!.id, paise!!, method, ref, m!!, date, note); onDismiss() }) { Text("Record") }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+fun OnlineOrderPaymentDialog(
+    application: OnlineApplication,
+    monthlyFeePaise: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (months: Int, reference: String, note: String) -> Unit,
+) {
+    var months by remember { mutableIntStateOf(1) }
+    var reference by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Record online-order payment") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(application.name, style = MaterialTheme.typography.titleMedium)
+                Text("Choose the coverage period. Amount: ${(monthlyFeePaise.toLong() * months).rupees()}")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(1, 3, 6, 12).forEach { count ->
+                        FilterChip(
+                            selected = months == count,
+                            onClick = { months = count },
+                            label = { Text("$count mo") },
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    reference,
+                    { reference = it.take(100) },
+                    label = { Text("Payment reference (optional)") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    note,
+                    { note = it.take(300) },
+                    label = { Text("Note (optional)") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = monthlyFeePaise > 0,
+                onClick = { onConfirm(months, reference.trim(), note.trim()); onDismiss() },
+            ) { Text("Record payment") }
         },
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
     )

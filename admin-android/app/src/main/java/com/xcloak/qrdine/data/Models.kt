@@ -279,6 +279,13 @@ data class Stats(
 )
 
 @Serializable
+data class OnlineOrderInsights(
+    val orders: Int = 0,
+    val sales: Long = 0,
+    val items: Long = 0,
+)
+
+@Serializable
 data class SnapRestaurant(
     val name: String = "", val address: String? = null, val gstin: String? = null,
     @SerialName("gst_mode") val gstMode: String = "none", val phone: String? = null, val fssai: String? = null,
@@ -361,6 +368,24 @@ data class OnlineApplication(
     @SerialName("online_application_note") val note: String? = null,
     @SerialName("online_application_submitted_at") val submittedAt: String? = null,
     @SerialName("online_application_review") val review: String? = null,
+    @SerialName("online_orders_enabled") val ordersEnabled: Boolean = false,
+    @SerialName("online_orders_admin_hold") val adminHold: Boolean = false,
+    @SerialName("online_orders_admin_hold_reason") val adminHoldReason: String? = null,
+    @SerialName("online_orders_paid_through") val paidThrough: String? = null,
+)
+
+@Serializable
+data class OnlineOrderServicePayment(
+    val id: String,
+    @SerialName("restaurant_id") val restaurantId: String,
+    val amount: Int,
+    val months: Int,
+    @SerialName("paid_on") val paidOn: String,
+    val reference: String? = null,
+    val note: String? = null,
+    @SerialName("period_start") val periodStart: String,
+    @SerialName("period_end") val periodEnd: String,
+    @SerialName("created_at") val createdAt: String,
 )
 
 @Serializable
