@@ -73,7 +73,11 @@ fun StaffPage() {
             staff.forEach { m ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
                             Column(Modifier.weight(1f)) {
                                 Text(m.name ?: m.email.orEmpty(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                                 Text("${if (m.role == "kitchen") "Kitchen" else "Waiter"} · ${m.email.orEmpty()}", style = MaterialTheme.typography.bodySmall)
@@ -285,13 +289,22 @@ fun DevicePage(onKitchenMode: (Boolean) -> Unit) {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                Switch(
-                    checked = alertSound,
-                    onCheckedChange = { enabled ->
-                        Prefs.setAlertSoundEnabled(context, enabled)
-                        alertSound = enabled
-                    },
-                )
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = alertSound, onClick = {
+                            Prefs.setAlertSoundEnabled(context, true)
+                            alertSound = true
+                        })
+                        Text("On")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = !alertSound, onClick = {
+                            Prefs.setAlertSoundEnabled(context, false)
+                            alertSound = false
+                        })
+                        Text("Off")
+                    }
+                }
             }
         }
 

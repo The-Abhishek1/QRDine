@@ -18,12 +18,12 @@ data class OwnerSnapshot(
     val pending: List<OrderCard> = emptyList(),
     val accepted: List<OrderCard> = emptyList(),
     val requests: List<RequestCard> = emptyList(),
-    val pendingOnlineOrders: Int = 0,
+    val pendingOnlineOrders: List<OnlineOrder> = emptyList(),
     val serving: List<ServingRow> = emptyList(),
     val error: String? = null,
 ) {
     /** Things that need the owner right now. The alert service keeps ringing while this is above zero. */
-    val attention: Int get() = pending.size + requests.size + pendingOnlineOrders
+    val attention: Int get() = pending.size + requests.size + pendingOnlineOrders.size
 }
 
 class OrdersRepository(private val sb: SupabaseClient) {
@@ -40,7 +40,7 @@ class OrdersRepository(private val sb: SupabaseClient) {
         val rest = sb.from("restaurants").select().decodeSingle<Restaurant>()
         val serving = sb.postgrest.rpc("owner_serving").decodeAs<List<ServingRow>>()
         val role = sb.auth.currentAccessTokenOrNull()?.let { Jwt.claim(it, "app_role") }
-        val pendingOnlineOrders = if (role == "owner" || role == "waiter") OnlineOrderRepository(sb).pendingCount() else 0
+        val pendingOnlineOrders = if (role == "owner" || role == "waiter") OnlineOrderRepository(sb).pendingOrders() else emptyList()
 
         val label = sessions.associate { s -> s.id to (tables.firstOrNull { it.id == s.tableId }?.label ?: "?") }
         fun card(o: OrderRow) = OrderCard(o, items.filter { it.orderId == o.id }, label[o.sessionId] ?: "?")

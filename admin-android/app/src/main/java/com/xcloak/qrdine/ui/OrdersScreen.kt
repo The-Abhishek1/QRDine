@@ -28,6 +28,7 @@ import com.xcloak.qrdine.data.label
 import com.xcloak.qrdine.notify.Prefs
 import com.xcloak.qrdine.print.Escpos
 import com.xcloak.qrdine.data.OrderCard
+import com.xcloak.qrdine.data.OnlineOrder
 import com.xcloak.qrdine.data.RequestCard
 import com.xcloak.qrdine.data.ServingRow
 import kotlinx.coroutines.delay
@@ -42,7 +43,13 @@ fun TableTag(label: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrdersScreen(bottomBar: @Composable () -> Unit, onOpenBill: (String, String) -> Unit, status: HotelStatus? = null, vm: OrdersViewModel = viewModel()) {
+fun OrdersScreen(
+    bottomBar: @Composable () -> Unit,
+    onOpenBill: (String, String) -> Unit,
+    status: HotelStatus? = null,
+    onOpenOnlineOrders: () -> Unit = {},
+    vm: OrdersViewModel = viewModel(),
+) {
     val snap by vm.snapshot.collectAsStateWithLifecycle()
     val ui by vm.ui.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -107,6 +114,12 @@ fun OrdersScreen(bottomBar: @Composable () -> Unit, onOpenBill: (String, String)
                         OrderCardView(o, tick) {
                             Button({ acceptFor = o }, enabled = !ui.busy, modifier = Modifier.weight(1f)) { Text("Accept") }
                             OutlinedButton({ rejectFor = o }, enabled = !ui.busy, modifier = Modifier.weight(1f)) { Text("Reject") }
+                        }
+                    }
+                    if (snap.pendingOnlineOrders.isNotEmpty()) {
+                        item { Text("Online orders (${snap.pendingOnlineOrders.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+                        items(snap.pendingOnlineOrders, key = { "online-${it.id}" }) { order ->
+                            PendingOnlineOrderCard(order, onOpenOnlineOrders)
                         }
                     }
                     if (snap.accepted.isNotEmpty()) item { Text("Cooking (${snap.accepted.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
@@ -206,6 +219,31 @@ private fun ServingCard(s: ServingRow, tick: Long, onOpen: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
             )
             Button(onOpen, Modifier.fillMaxWidth()) { Text(if (bill) "Collect payment" else "View dishes and bill") }
+        }
+    }
+}
+
+@Composable
+private fun PendingOnlineOrderCard(order: OnlineOrder, onOpen: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(order.customerName, fontWeight = FontWeight.SemiBold)
+                    Text("Online · ${order.fulfilment.replace('_', ' ')} · ${order.id.take(8)}", style = MaterialTheme.typography.bodySmall)
+                }
+                Text(order.total.toLong().rupees(), fontWeight = FontWeight.Bold)
+            }
+            Text("${order.paymentMethod.uppercase()} · ${order.paymentStatus.replace('_', ' ')} · ${ago(order.createdAt)}", style = MaterialTheme.typography.bodySmall)
+            order.items.forEach { item ->
+                Text("${item.qty} × ${item.name}" + (item.variantName?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
+            }
+            order.customerNote?.takeIf(String::isNotBlank)?.let { Text("Note: $it", style = MaterialTheme.typography.bodySmall) }
+            order.deliveryAddress?.let { Text("Delivery: $it, ${order.postalCode.orEmpty()}", style = MaterialTheme.typography.bodySmall) }
+            Button(onClick = onOpen, modifier = Modifier.fillMaxWidth()) { Text("Review and respond to online order") }
         }
     }
 }

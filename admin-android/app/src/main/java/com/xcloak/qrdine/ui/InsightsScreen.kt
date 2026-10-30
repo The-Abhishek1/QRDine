@@ -72,7 +72,7 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
     val owner = QrDineApp.container.owner
     val scope = rememberCoroutineScope()
     var range by rememberSaveable { mutableStateOf(Range.WEEK) }
-    var channel by rememberSaveable { mutableStateOf(Channel.QR_TABLE) }
+    var channel by rememberSaveable { mutableStateOf(Channel.ALL) }
     var data by remember { mutableStateOf<Insights?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }

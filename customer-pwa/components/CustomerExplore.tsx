@@ -92,6 +92,7 @@ export default function CustomerExplore() {
   const [profileDraft, setProfileDraft] = useState<CustomerProfile>({ full_name: "", phone: "", address: "", postal_code: "" });
   const [editingProfile, setEditingProfile] = useState(true);
   const [orders, setOrders] = useState<OnlineOrder[]>([]);
+  const [ordersRefreshing, setOrdersRefreshing] = useState(false);
   const [fulfilment, setFulfilment] = useState<"delivery" | "pickup">("delivery");
   const [paymentMethod, setPaymentMethod] = useState<"upi" | "cod">("upi");
   const [activeOrder, setActiveOrder] = useState<OnlineOrder | null>(null);
@@ -561,6 +562,8 @@ export default function CustomerExplore() {
   }
 
   async function refreshCustomerOrders() {
+    if (ordersRefreshing) return;
+    setOrdersRefreshing(true);
     try {
       const { data, error: ordersError } = await customerSupabase().rpc("customer_online_orders", { p_limit: 25 });
       if (ordersError) throw ordersError;
@@ -569,6 +572,8 @@ export default function CustomerExplore() {
       setActiveOrder((current) => current ? rows.find((order) => order.id === current.id) ?? current : null);
     } catch {
       setError("Could not refresh your order status. Please try again.");
+    } finally {
+      setOrdersRefreshing(false);
     }
   }
 
@@ -777,7 +782,9 @@ export default function CustomerExplore() {
                   {orders.length > 0 && (
                     <section className="online-order-history">
                       <h3>Your online orders</h3>
-                      <button className="link" type="button" onClick={() => void refreshCustomerOrders()}>Refresh order status</button>
+                      <button className="link" type="button" disabled={ordersRefreshing} onClick={() => void refreshCustomerOrders()}>
+                        {ordersRefreshing ? "Refreshing orders…" : "Refresh order status"}
+                      </button>
                       {orders.filter((order) => order.restaurant_id === selectedRestaurant.id).map((order) => (
                         <article key={order.id}>
                           <button className="link" type="button" onClick={() => setActiveOrder(order)}>

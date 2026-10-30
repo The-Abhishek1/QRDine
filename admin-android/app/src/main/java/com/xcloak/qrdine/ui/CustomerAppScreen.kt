@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -95,6 +98,8 @@ fun CustomerAppScreen() {
     var profileError by remember { mutableStateOf<String?>(null) }
     var profileEditorOpen by remember { mutableStateOf(false) }
     var serviceFilter by rememberSaveable { mutableStateOf("all") }
+    var menuQuery by rememberSaveable { mutableStateOf("") }
+    var menuCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val customerRoleReady = remember { QrDineApp.container.auth.customerRoleConfigured() }
 
@@ -118,6 +123,8 @@ fun CustomerAppScreen() {
         selectedRestaurant = restaurant
         menu = null
         cart = emptyList()
+        menuQuery = ""
+        menuCategoryId = null
         menuLoading = true
         error = null
         scope.launch {
@@ -132,6 +139,26 @@ fun CustomerAppScreen() {
                 if (requestId == menuRequestId) {
                     error = "This menu could not be loaded. Check your connection and try again."
                 }
+            } finally {
+                if (requestId == menuRequestId) menuLoading = false
+            }
+        }
+    }
+
+    fun refreshRestaurantMenu(restaurant: OnlineRestaurant) {
+        val requestId = ++menuRequestId
+        menuLoading = true
+        scope.launch {
+            try {
+                val response = QrDineApp.container.customer.menu(restaurant.id)
+                if (requestId == menuRequestId) {
+                    selectedRestaurant = response.restaurant
+                    menu = response.menu
+                    error = null
+                }
+            } catch (e: Exception) {
+                Diagnostics.record(QrDineApp.appContext, e, "customer-menu-refresh")
+                if (requestId == menuRequestId) error = "Could not refresh this restaurant's menu. Please try again."
             } finally {
                 if (requestId == menuRequestId) menuLoading = false
             }
@@ -299,6 +326,11 @@ fun CustomerAppScreen() {
                         )
                     }
                 }
+                CustomerRestaurantHero(
+                    restaurant = restaurant,
+                    onRefresh = { refreshRestaurantMenu(restaurant) },
+                    refreshing = menuLoading,
+                )
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -329,12 +361,57 @@ fun CustomerAppScreen() {
                             Card(Modifier.fillMaxWidth()) { Text(it, Modifier.padding(12.dp)) }
                         }
                         val onlineMenu = menu!!
+                        val menuCategories = onlineMenu.categories.sortedBy { it.sort }.filter { category ->
+                            (menuCategoryId == null || category.id == menuCategoryId) &&
+                                onlineMenu.dishes.any { dish ->
+                                    dish.categoryId == category.id &&
+                                        (menuQuery.isBlank() || dish.name.contains(menuQuery.trim(), ignoreCase = true) ||
+                                            dish.description.orEmpty().contains(menuQuery.trim(), ignoreCase = true))
+                                }
+                        }
                         val cartCount = cart.sumOf { it.qty }
                         val subtotal = cart.sumOf { it.qty * it.unitPrice }
                         LazyColumn(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
+                            item(key = "menu-search") {
+                                OutlinedTextField(
+                                    value = menuQuery,
+                                    onValueChange = { menuQuery = it },
+                                    label = { Text("Search dishes") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            if (onlineMenu.categories.size > 1) {
+                                item(key = "menu-category-filters") {
+                                    Row(
+                                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        FilterChip(
+                                            selected = menuCategoryId == null,
+                                            onClick = { menuCategoryId = null },
+                                            label = { Text("All") },
+                                        )
+                                        onlineMenu.categories.sortedBy { it.sort }.forEach { category ->
+                                            FilterChip(
+                                                selected = menuCategoryId == category.id,
+                                                onClick = { menuCategoryId = if (menuCategoryId == category.id) null else category.id },
+                                                label = { Text(category.name) },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            item(key = "menu-help") {
+                                Text(
+                                    "Tap Add to cart to choose a dish. Sizes and optional add-ons are selected before it is added.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             if (onlineMenu.offers.isNotEmpty()) {
                                 item(key = "online-offers") {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -347,7 +424,7 @@ fun CustomerAppScreen() {
                                                     Column(Modifier.padding(12.dp)) {
                                                         Text(offer.name, fontWeight = FontWeight.SemiBold)
                                                         Text("Buy ${offer.buyQty} ${buyDish.name}, get ${offer.getQty} ${rewardDish.name}")
-                                                        Text("Add the reward item to qualify.", style = MaterialTheme.typography.bodySmall)
+                                                        Text("The reward is added automatically when your order qualifies.", style = MaterialTheme.typography.bodySmall)
                                                     }
                                                 }
                                             }
@@ -355,7 +432,7 @@ fun CustomerAppScreen() {
                                     }
                                 }
                             }
-                            onlineMenu.categories.sortedBy { it.sort }.forEach { category ->
+                            menuCategories.forEach { category ->
                                 item(key = "cat-${category.id}") {
                                     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                                         Text(category.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -364,7 +441,14 @@ fun CustomerAppScreen() {
                                         }
                                     }
                                 }
-                                items(onlineMenu.dishes.filter { it.categoryId == category.id }, key = { it.id }) { dish ->
+                                items(
+                                    onlineMenu.dishes.filter { dish ->
+                                        dish.categoryId == category.id &&
+                                            (menuQuery.isBlank() || dish.name.contains(menuQuery.trim(), ignoreCase = true) ||
+                                                dish.description.orEmpty().contains(menuQuery.trim(), ignoreCase = true))
+                                    },
+                                    key = { it.id },
+                                ) { dish ->
                                     val dishCartQty = cart.filter { it.dishId == dish.id }.sumOf { it.qty }
                                     val available = dish.isAvailable && dish.onlineAvailable && category.openNow && (dish.stockLeft == null || dish.stockLeft > 0)
                                     Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
@@ -373,6 +457,13 @@ fun CustomerAppScreen() {
                                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
+                                            if (!dish.imageUrl.isNullOrBlank()) {
+                                                CustomerPhoto(
+                                                    url = dish.imageUrl,
+                                                    label = dish.name,
+                                                    modifier = Modifier.size(72.dp),
+                                                )
+                                            }
                                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                                 Text(dish.name, fontWeight = FontWeight.SemiBold)
                                                 val startingVariant = dish.variants.minByOrNull { it.price }
@@ -403,7 +494,7 @@ fun CustomerAppScreen() {
                                                 OutlinedButton(
                                                     onClick = { configuring = dish },
                                                     enabled = dishCartQty < minOf(dish.stockLeft ?: 50, 50),
-                                                ) { Text("Add") }
+                                                ) { Text("Add to cart") }
                                             } else {
                                                 Text(
                                                     if (!dish.isAvailable || dish.stockLeft == 0) "Sold out" else if (!dish.onlineAvailable) "Not available online" else "Not available",
@@ -449,10 +540,63 @@ fun CustomerAppScreen() {
                             ) { Text("Continue to checkout") }
                         }
                         activeOrder?.let { order ->
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("Order ${order.id.take(8)} · ${order.status.uppercase()}", fontWeight = FontWeight.Bold)
-                                    Text("Payment: ${order.paymentStatus.replace('_', ' ')}")
+                            GlassCard(Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Order ${order.id.take(8)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                            Text(order.status.replace('_', ' ').uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                                        }
+                                        IconButton(onClick = {
+                                            scope.launch {
+                                                orderBusy = true
+                                                try {
+                                                    customerOrders = QrDineApp.container.customer.orders()
+                                                    activeOrder = customerOrders.firstOrNull { it.id == order.id } ?: order
+                                                    error = null
+                                                } catch (e: Exception) {
+                                                    Diagnostics.record(QrDineApp.appContext, e, "customer-order-detail-refresh")
+                                                    error = "Could not refresh this order. Please try again."
+                                                } finally {
+                                                    orderBusy = false
+                                                }
+                                            }
+                                        }, enabled = !orderBusy) {
+                                            androidx.compose.material3.Icon(Icons.Default.Refresh, contentDescription = "Refresh order details")
+                                        }
+                                    }
+                                    Text("${order.fulfilment.replace('_', ' ').replaceFirstChar(Char::uppercase)} · ${order.paymentMethod.uppercase()} · ${order.paymentStatus.replace('_', ' ')}")
+                                    if (order.etaMinutes != null && order.status == "accepted") {
+                                        Text("Estimated preparation time: ${order.etaMinutes} minutes", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                    if (order.items.isNotEmpty()) {
+                                        HorizontalDivider()
+                                        Text("Items", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                        order.items.forEach { item ->
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("${item.qty} × ${item.name}" + (item.variantName?.let { " · $it" } ?: ""), Modifier.weight(1f))
+                                                Text(((item.qty - item.offerFreeQty).coerceAtLeast(0) * item.unitPrice).rupees())
+                                            }
+                                            item.offerFreeQty.takeIf { it > 0 }?.let {
+                                                Text("$it free with offer", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                            item.addons.takeIf { it.isNotEmpty() }?.let { addons ->
+                                                Text("Add-ons: ${addons.joinToString { addon -> addon.name }}", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                            item.instructions?.takeIf(String::isNotBlank)?.let { Text("Note: $it", style = MaterialTheme.typography.bodySmall) }
+                                        }
+                                    }
+                                    HorizontalDivider()
+                                    Text("Items ${order.subtotal.rupees()}", style = MaterialTheme.typography.bodySmall)
+                                    if (order.offerDiscount > 0) Text("Offer discount −${order.offerDiscount.rupees()}", style = MaterialTheme.typography.bodySmall)
+                                    if (order.deliveryFee > 0) Text("Delivery ${order.deliveryFee.rupees()}", style = MaterialTheme.typography.bodySmall)
+                                    if (order.codFee > 0) Text("COD fee ${order.codFee.rupees()}", style = MaterialTheme.typography.bodySmall)
+                                    Text("Total ${order.total.rupees()}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                    order.rejectReason?.let { Text("Reason: $it", color = MaterialTheme.colorScheme.error) }
+                                    if (order.customerRating != null) {
+                                        Text("Your rating: ${"★".repeat(order.customerRating)}${"☆".repeat(5 - order.customerRating)}", fontWeight = FontWeight.SemiBold)
+                                        order.customerFeedback?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                                    }
                                     if (order.paymentMethod == "upi" && order.paymentStatus in setOf("awaiting_payment", "verification_required")) {
                                         val upiId = restaurant.upiId
                                         if (!upiId.isNullOrBlank()) {
@@ -779,20 +923,6 @@ fun CustomerAppScreen() {
                                 enabled = customerRoleReady,
                             ) { Text(if (customerProfile == null) "Complete profile" else "Edit profile") }
                         }
-                        GlassCard(Modifier.fillMaxWidth()) {
-                            Text("Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("You are signed in with a separate customer account. Restaurant owner and staff access is kept separate.")
-                            OutlinedButton(onClick = {
-                                scope.launch {
-                                    try {
-                                        QrDineApp.container.auth.signOut()
-                                    } catch (e: Exception) {
-                                        Diagnostics.record(QrDineApp.appContext, e, "customer-signout")
-                                        error = "Could not sign out. Please try again."
-                                    }
-                                }
-                            }) { Text("Sign out") }
-                        }
                     }
                 }
             }
@@ -881,6 +1011,73 @@ private fun restaurantDirectoryError(error: Exception): String {
 }
 
 @Composable
+private fun CustomerRestaurantHero(
+    restaurant: OnlineRestaurant,
+    onRefresh: () -> Unit,
+    refreshing: Boolean,
+) {
+    Card(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(22.dp),
+    ) {
+        Column {
+            CustomerPhoto(
+                restaurant.logoUrl,
+                restaurant.name,
+                Modifier.fillMaxWidth().height(160.dp),
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(restaurant.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    restaurant.address?.takeIf(String::isNotBlank)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                IconButton(onClick = onRefresh, enabled = !refreshing) {
+                    if (refreshing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else androidx.compose.material3.Icon(Icons.Default.Refresh, contentDescription = "Refresh restaurant menu")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomerPhoto(url: String?, label: String, modifier: Modifier = Modifier) {
+    var failed by remember(url) { mutableStateOf(false) }
+    if (!url.isNullOrBlank() && !failed) {
+        AsyncImage(
+            model = url,
+            contentDescription = "$label image",
+            contentScale = ContentScale.Crop,
+            modifier = modifier.clip(RoundedCornerShape(14.dp)),
+            onError = { failed = true },
+        )
+    } else {
+        Box(
+            modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                androidx.compose.material3.Icon(
+                    Icons.Default.Restaurant,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(32.dp),
+                )
+                Text(label, color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
+@Composable
 private fun CustomerRestaurantCard(restaurant: OnlineRestaurant, onOpen: () -> Unit) {
     Card(
         onClick = onOpen,
@@ -888,14 +1085,7 @@ private fun CustomerRestaurantCard(restaurant: OnlineRestaurant, onOpen: () -> U
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
-            if (!restaurant.logoUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = restaurant.logoUrl,
-                    contentDescription = "${restaurant.name} restaurant",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(150.dp),
-                )
-            }
+            CustomerPhoto(restaurant.logoUrl, restaurant.name, Modifier.fillMaxWidth().height(170.dp))
             Column(
                 Modifier.fillMaxWidth().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),

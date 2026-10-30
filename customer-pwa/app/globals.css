@@ -140,6 +140,8 @@ button { cursor: pointer; }
 .legal-nav { display: flex; gap: 18px; border-top: 1px solid var(--line); margin-top: 32px; padding-top: 16px; }
 
 .slips { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 14px; }
+.order-refresh-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 10px; color: var(--muted); font-size: .9rem; }
+.order-refresh-row .btn-outline { min-height: 40px; padding: 7px 13px; }
 .slip { background: var(--card); padding: 12px 14px; border-top: 2px dashed var(--ink); border-bottom: 2px dashed var(--ink); }
 .slip-head { display: flex; justify-content: space-between; font-weight: 700; }
 .slip-type { font-weight: 500; color: var(--muted); }

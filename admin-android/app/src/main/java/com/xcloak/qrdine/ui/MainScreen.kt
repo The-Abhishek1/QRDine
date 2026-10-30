@@ -202,7 +202,12 @@ fun MainScreen(restaurantId: String, role: String) {
 
     val screen: @Composable (@Composable () -> Unit) -> Unit = { b ->
         when (current) {
-            "orders" -> OrdersScreen(bottomBar = b, onOpenBill = openBill, status = hotelStatus)
+            "orders" -> OrdersScreen(
+                bottomBar = b,
+                onOpenBill = openBill,
+                status = hotelStatus,
+                onOpenOnlineOrders = { tab = tabs.indexOf("online").takeIf { it >= 0 } ?: tab },
+            )
             "online" -> OnlineOrdersScreen(bottomBar = b)
             "tables" -> TablesScreen(tablesVm, bottomBar = b, onOpenBill = openBill, canManage = role == "owner")
             "menu" -> if (menuVm != null) MenuHost(

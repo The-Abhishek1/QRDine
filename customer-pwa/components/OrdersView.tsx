@@ -30,15 +30,16 @@ function statusLine(o: OrderView, now: number, lang: string, t: (k: string, v?: 
   }
 }
 
-export default function OrdersView({ s, tableLabel, busy, notice, onService, onCoupon }: {
+export default function OrdersView({ s, tableLabel, busy, notice, onService, onCoupon, onRefresh }: {
   s: ActiveState; tableLabel: string; busy: boolean; notice: string | null; onService: (t: "waiter" | "bill") => void;
-  onCoupon: (code: string) => Promise<string | null>;
+  onCoupon: (code: string) => Promise<string | null>; onRefresh: () => Promise<void>;
 }) {
   const { t, lang } = useI18n();
   const now = useNow();
   const [code, setCode] = useState("");
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
   const [couponBusy, setCouponBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const waiterOpen = s.open_requests.includes("waiter");
   const billOpen = s.session_status === "bill_requested" || s.open_requests.includes("bill");
   const settled = s.orders.every((o) => o.status === "completed" || o.status === "rejected" || o.status === "cancelled");
@@ -52,6 +53,20 @@ export default function OrdersView({ s, tableLabel, busy, notice, onService, onC
 
   return (
     <div>
+      <div className="order-refresh-row">
+        <span>{s.orders.length ? `${s.orders.length} order${s.orders.length === 1 ? "" : "s"}` : t("noOrders")}</span>
+        <button
+          className="btn-outline"
+          type="button"
+          disabled={refreshing}
+          onClick={async () => {
+            setRefreshing(true);
+            try { await onRefresh(); } finally { setRefreshing(false); }
+          }}
+        >
+          {refreshing ? "Refreshing…" : "Refresh orders"}
+        </button>
+      </div>
       {s.orders.length === 0 && <p className="empty">{t("noOrders")}</p>}
       <ul className="slips">
         {s.orders.map((o, i) => {

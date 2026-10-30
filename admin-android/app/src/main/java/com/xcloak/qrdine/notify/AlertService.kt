@@ -59,7 +59,7 @@ class AlertService : Service() {
             val now = SystemClock.elapsedRealtime()
             if (n > 0 && (n > last || now - lastRing >= 30_000)) {
                 val (title, text) = describe(snap)
-                val single = if (snap.pending.size == 1 && snap.requests.isEmpty() && snap.pendingOnlineOrders == 0) snap.pending[0].order.id else null
+                val single = if (snap.pending.size == 1 && snap.requests.isEmpty() && snap.pendingOnlineOrders.isEmpty()) snap.pending[0].order.id else null
                 Notifier.alert(this, title, text, single)
                 if (Prefs.alertSoundEnabled(this)) AlertSound.play(this) else AlertSound.stop()
                 lastRing = now
@@ -74,7 +74,7 @@ class AlertService : Service() {
         val tables = (s.pending.map { it.tableLabel } + s.requests.map { it.tableLabel }).distinct().joinToString(", ")
         val waiting = buildList {
             if (s.pending.isNotEmpty()) add("${s.pending.size} table order(s)")
-            if (s.pendingOnlineOrders > 0) add("${s.pendingOnlineOrders} online order(s)")
+            if (s.pendingOnlineOrders.isNotEmpty()) add("${s.pendingOnlineOrders.size} online order(s)")
             if (s.requests.isNotEmpty()) add("${s.requests.size} table request(s)")
         }
         val location = if (tables.isNotEmpty()) "Tables $tables. " else ""

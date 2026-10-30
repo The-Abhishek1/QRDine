@@ -358,7 +358,7 @@ export default function TableApp({ token }: { token: string }) {
       <main className="content">
         {tab === "menu" && menu && <MenuView menu={menu} lines={cart} onQuickAdd={quickAdd} onQuickRemove={quickRemove} onConfigure={setConfiguring} onRefresh={() => refresh(true)} />}
         {tab === "orders" && (session
-          ? <OrdersView s={session} tableLabel={tableLabel} busy={svcBusy} notice={svcNotice} onService={service} onCoupon={applyCoupon} />
+          ? <OrdersView s={session} tableLabel={tableLabel} busy={svcBusy} notice={svcNotice} onService={service} onCoupon={applyCoupon} onRefresh={() => refresh(true)} />
           : <p className="empty">…</p>)}
       </main>
 

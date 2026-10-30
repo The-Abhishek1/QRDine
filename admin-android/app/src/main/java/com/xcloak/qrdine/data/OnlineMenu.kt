@@ -44,11 +44,14 @@ data class OnlineOrder(
     @SerialName("payment_reference") val paymentReference: String? = null,
     @SerialName("items_snapshot") val items: List<OnlineOrderItem> = emptyList(),
     val subtotal: Int,
+    @SerialName("offer_discount") val offerDiscount: Int = 0,
     @SerialName("delivery_fee") val deliveryFee: Int,
     @SerialName("cod_fee") val codFee: Int,
     val total: Int,
     @SerialName("reject_reason") val rejectReason: String? = null,
     @SerialName("eta_minutes") val etaMinutes: Int? = null,
+    @SerialName("customer_rating") val customerRating: Int? = null,
+    @SerialName("customer_feedback") val customerFeedback: String? = null,
     @SerialName("created_at") val createdAt: String,
     @SerialName("accepted_at") val acceptedAt: String? = null,
     @SerialName("updated_at") val updatedAt: String = "",
@@ -63,6 +66,7 @@ data class OnlineOrderItem(
     @SerialName("variant_name") val variantName: String? = null,
     val addons: List<OnlineOrderAddon> = emptyList(),
     val instructions: String? = null,
+    @SerialName("offer_free_qty") val offerFreeQty: Int = 0,
 )
 
 @Serializable
