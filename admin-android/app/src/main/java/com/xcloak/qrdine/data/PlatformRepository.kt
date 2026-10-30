@@ -31,11 +31,12 @@ class PlatformRepository(private val sb: SupabaseClient) {
     suspend fun setOnlineOrderMonthlyFee(amountPaise: Int) {
         sb.postgrest.rpc("platform_set_online_order_monthly_fee", buildJsonObject { put("p_amount", amountPaise) })
     }
-    suspend fun recordOnlineOrderPayment(rid: String, amountPaise: Int, months: Int, reference: String, note: String) {
+    suspend fun recordOnlineOrderPayment(rid: String, amountPaise: Int, months: Int, method: String, reference: String, note: String) {
         sb.postgrest.rpc("platform_record_online_order_payment", buildJsonObject {
             put("p_rid", rid)
             put("p_amount", amountPaise)
             put("p_months", months)
+            put("p_method", method)
             put("p_reference", reference)
             put("p_note", note)
         })

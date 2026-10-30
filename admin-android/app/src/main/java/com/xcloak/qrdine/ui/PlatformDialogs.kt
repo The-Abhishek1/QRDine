@@ -124,9 +124,10 @@ fun OnlineOrderPaymentDialog(
     application: OnlineApplication,
     monthlyFeePaise: Int,
     onDismiss: () -> Unit,
-    onConfirm: (months: Int, reference: String, note: String) -> Unit,
+    onConfirm: (months: Int, method: String, reference: String, note: String) -> Unit,
 ) {
     var months by remember { mutableIntStateOf(1) }
+    var method by remember { mutableStateOf("upi") }
     var reference by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     AlertDialog(
@@ -142,6 +143,15 @@ fun OnlineOrderPaymentDialog(
                             selected = months == count,
                             onClick = { months = count },
                             label = { Text("$count mo") },
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("cash" to "Cash", "upi" to "UPI", "bank" to "Bank").forEach { (value, label) ->
+                        FilterChip(
+                            selected = method == value,
+                            onClick = { method = value },
+                            label = { Text(label) },
                         )
                     }
                 }
@@ -162,7 +172,7 @@ fun OnlineOrderPaymentDialog(
         confirmButton = {
             TextButton(
                 enabled = monthlyFeePaise > 0,
-                onClick = { onConfirm(months, reference.trim(), note.trim()); onDismiss() },
+                onClick = { onConfirm(months, method, reference.trim(), note.trim()); onDismiss() },
             ) { Text("Record payment") }
         },
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },

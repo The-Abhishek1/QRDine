@@ -85,7 +85,8 @@ export default function CustomerExplore() {
   const [selectedRestaurant, setSelectedRestaurant] = useState<OnlineRestaurant | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [menuLoading, setMenuLoading] = useState(false);
-  const [menuRetry, setMenuRetry] = useState(0);
+  const [menuRefreshing, setMenuRefreshing] = useState(false);
+  const menuRequestId = useRef(0);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [profileDraft, setProfileDraft] = useState<CustomerProfile>({ full_name: "", phone: "", address: "", postal_code: "" });
@@ -227,13 +228,14 @@ export default function CustomerExplore() {
   useEffect(() => {
     if (!session || !selectedRestaurant) return;
     let active = true;
+    const requestId = ++menuRequestId.current;
     setMenuLoading(true);
     setMenu(null);
     setCart([]);
     customerSupabase().functions.invoke("online-menu", {
       body: { restaurant_id: selectedRestaurant.id },
     }).then(({ data, error: invokeError }) => {
-      if (!active) return;
+      if (!active || requestId !== menuRequestId.current) return;
       if (invokeError) {
         setError("Could not load this restaurant's menu. Please try again.");
         return;
@@ -249,12 +251,15 @@ export default function CustomerExplore() {
       setPaymentMethod(result.restaurant.online_upi_enabled ? "upi" : "cod");
       setError(null);
     }).catch(() => {
-      if (active) setError("Could not load this restaurant's menu. Please try again.");
+      if (active && requestId === menuRequestId.current) setError("Could not load this restaurant's menu. Please try again.");
     }).finally(() => {
-      if (active) setMenuLoading(false);
+      if (active && requestId === menuRequestId.current) setMenuLoading(false);
     });
-    return () => { active = false; };
-  }, [session, selectedRestaurant?.id, menuRetry]);
+    return () => {
+      active = false;
+      if (menuRequestId.current === requestId) menuRequestId.current++;
+    };
+  }, [session, selectedRestaurant?.id]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
@@ -364,6 +369,35 @@ export default function CustomerExplore() {
   const discountedSubtotal = Math.max(0, subtotal - offerDiscount);
   const i18n = useMemo(() => makeI18n("en"), []);
   const profileComplete = !!profile?.full_name && !!profile.phone && !!profile.address && !!profile.postal_code;
+
+  async function refreshOnlineMenu() {
+    if (!session || !selectedRestaurant || menuRefreshing) return;
+    const requestId = ++menuRequestId.current;
+    setMenuRefreshing(true);
+    setError(null);
+    try {
+      const { data, error: invokeError } = await customerSupabase().functions.invoke("online-menu", {
+        body: { restaurant_id: selectedRestaurant.id },
+      });
+      if (requestId !== menuRequestId.current) return;
+      if (invokeError) throw invokeError;
+      const result = data as { restaurant?: OnlineRestaurant; menu?: Menu } | null;
+      if (!result?.menu || !result.restaurant) {
+        throw new Error("This restaurant is not currently accepting online orders.");
+      }
+      setSelectedRestaurant(result.restaurant);
+      setMenu(result.menu);
+      setError(null);
+    } catch (e) {
+      if (requestId === menuRequestId.current) {
+        setError(e instanceof Error && e.message
+          ? e.message
+          : "Could not refresh this restaurant's menu. Please try again.");
+      }
+    } finally {
+      if (requestId === menuRequestId.current) setMenuRefreshing(false);
+    }
+  }
 
   async function submitOnlineReview(event: FormEvent) {
     event.preventDefault();
@@ -583,12 +617,21 @@ export default function CustomerExplore() {
                 {selectedRestaurant.online_delivery_enabled && selectedRestaurant.online_pickup_enabled && " · "}
                 {selectedRestaurant.online_pickup_enabled && "Pickup available"}
               </p>
-              {menuLoading ? <p role="status">Loading menu…</p> : error ? (
-                <div><p className="error" role="alert">{error}</p><button className="btn-outline" onClick={() => setMenuRetry((retry) => retry + 1)}>Try again</button></div>
+              {menuLoading ? <p role="status">Loading menu…</p> : error && !menu ? (
+                <div><p className="error" role="alert">{error}</p><button className="btn-outline" onClick={() => void refreshOnlineMenu()}>Try again</button></div>
               ) : menu ? (
                 <>
+                  {error && <p className="error" role="alert">{error}</p>}
                   {menu.announcement && <p className="announce">{menu.announcement}</p>}
-                  <MenuView menu={menu} lines={cart} onQuickAdd={quickAdd} onQuickRemove={quickRemove} onConfigure={setConfiguring} onlineMode />
+                  <MenuView
+                    menu={menu}
+                    lines={cart}
+                    onQuickAdd={quickAdd}
+                    onQuickRemove={quickRemove}
+                    onConfigure={setConfiguring}
+                    onRefresh={refreshOnlineMenu}
+                    onlineMode
+                  />
                   {itemCount > 0 && (
                     <section className="online-cart" aria-label="Your selection">
                       <div>
@@ -703,7 +746,13 @@ export default function CustomerExplore() {
                         ))}
                       </ul>
                       {activeOrder.offer_discount > 0 && <p>Offer discount: −{rupees(activeOrder.offer_discount)}</p>}
-                      <p>Items {rupees(activeOrder.subtotal)} · Delivery {rupees(activeOrder.delivery_fee)} · COD {rupees(activeOrder.cod_fee)} · Total <strong>{rupees(activeOrder.total)}</strong></p>
+                      <div className="online-order-summary">
+                        <span>Items</span><span>{rupees(activeOrder.subtotal)}</span>
+                        <span>Delivery</span><span>{rupees(activeOrder.delivery_fee)}</span>
+                        <span>COD fee</span><span>{rupees(activeOrder.cod_fee)}</span>
+                        {activeOrder.offer_discount > 0 && <><span>Offer discount</span><span>−{rupees(activeOrder.offer_discount)}</span></>}
+                        <strong>Total</strong><strong>{rupees(activeOrder.total)}</strong>
+                      </div>
                       {activeOrder.status === "completed" && activeOrder.customer_rating == null && (
                         <form onSubmit={submitOnlineReview} className="online-review-form">
                           <label>Rate your order

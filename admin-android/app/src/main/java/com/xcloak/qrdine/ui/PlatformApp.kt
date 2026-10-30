@@ -158,8 +158,8 @@ fun PlatformApp(vm: PlatformViewModel = viewModel()) {
         }
     }
     onlinePaymentFor?.let { app ->
-        OnlineOrderPaymentDialog(app, ui.onlineOrderMonthlyFee, { onlinePaymentFor = null }) { months, reference, note ->
-            vm.recordOnlineOrderPayment(app.id, ui.onlineOrderMonthlyFee * months, months, reference, note)
+        OnlineOrderPaymentDialog(app, ui.onlineOrderMonthlyFee, { onlinePaymentFor = null }) { months, method, reference, note ->
+            vm.recordOnlineOrderPayment(app.id, ui.onlineOrderMonthlyFee * months, months, method, reference, note)
             onlinePaymentFor = null
         }
     }
@@ -472,7 +472,7 @@ private fun PlatformOnlineTab(
                 ui.onlineOrderPayments.forEach { payment ->
                     HorizontalDivider()
                     Text(restaurantNames[payment.restaurantId] ?: "Restaurant", fontWeight = FontWeight.SemiBold)
-                    Text("${payment.amount.toLong().rupees()} · ${payment.months} month${if (payment.months == 1) "" else "s"} · ${payment.paidOn}", style = MaterialTheme.typography.bodySmall)
+                    Text("${payment.amount.toLong().rupees()} · ${payment.method.uppercase()} · ${payment.months} month${if (payment.months == 1) "" else "s"} · ${payment.paidOn}", style = MaterialTheme.typography.bodySmall)
                     Text("Coverage ${payment.periodStart} to ${payment.periodEnd}", style = MaterialTheme.typography.bodySmall)
                     payment.reference?.takeIf(String::isNotBlank)?.let { Text("Reference: $it", style = MaterialTheme.typography.bodySmall) }
                     payment.note?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

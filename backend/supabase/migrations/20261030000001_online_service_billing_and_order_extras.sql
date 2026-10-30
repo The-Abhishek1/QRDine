@@ -12,6 +12,7 @@ create table public.online_order_service_payments (
   restaurant_id uuid not null references public.restaurants(id) on delete cascade,
   amount int not null check (amount > 0),
   months int not null check (months between 1 and 36),
+  method text not null check (method in ('cash', 'upi', 'bank')),
   paid_on date not null default current_date,
   reference text check (reference is null or char_length(reference) <= 100),
   note text check (note is null or char_length(note) <= 300),
@@ -45,7 +46,7 @@ language sql stable security definer set search_path = public as $$
     select not r.online_orders_admin_hold
       and (
         coalesce((select s.online_order_monthly_fee from public.platform_settings s where s.id = 1), 0) = 0
-        or r.online_orders_paid_through > now()
+        or r.online_orders_paid_through >= now()
       )
     from public.restaurants r
     where r.id = p_rid
@@ -57,14 +58,14 @@ returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_platform_admin() then raise exception 'not_platform_admin'; end if;
-  if p_amount not between 0 and 1000000 then raise exception 'bad_online_order_fee'; end if;
+  if p_amount is null or p_amount not between 0 and 1000000 then raise exception 'bad_online_order_fee'; end if;
   update public.platform_settings set online_order_monthly_fee = p_amount where id = 1;
   insert into public.platform_audit(actor, action, data)
   values (auth.uid(), 'online_order_fee_set', jsonb_build_object('monthly_fee', p_amount));
 end $$;
 
 create or replace function public.platform_record_online_order_payment(
-  p_rid uuid, p_amount int, p_months int, p_reference text default null,
+  p_rid uuid, p_amount int, p_months int, p_method text, p_reference text default null,
   p_paid_on date default current_date, p_note text default null
 ) returns void
 language plpgsql security definer set search_path = public as $$
@@ -77,6 +78,7 @@ begin
   if not public.is_platform_admin() then raise exception 'not_platform_admin'; end if;
   if p_amount is null or p_amount <= 0 then raise exception 'bad_amount'; end if;
   if p_months is null or p_months not between 1 and 36 then raise exception 'bad_months'; end if;
+  if p_method is null or p_method not in ('cash', 'upi', 'bank') then raise exception 'bad_method'; end if;
   if char_length(trim(coalesce(p_reference, ''))) > 100 or char_length(trim(coalesce(p_note, ''))) > 300 then
     raise exception 'bad_online_order_payment';
   end if;
@@ -89,12 +91,14 @@ begin
   v_start := greatest(current_date, coalesce(v_restaurant.online_orders_paid_through::date, current_date));
   v_end := (v_start + make_interval(months => p_months))::date;
   insert into public.online_order_service_payments(
-    restaurant_id, amount, months, paid_on, reference, note, period_start, period_end, created_by
+    restaurant_id, amount, months, method, paid_on, reference, note, period_start, period_end, created_by
   ) values (
-    p_rid, p_amount, p_months, coalesce(p_paid_on, current_date),
+    p_rid, p_amount, p_months, p_method, coalesce(p_paid_on, current_date),
     nullif(trim(p_reference), ''), nullif(trim(p_note), ''), v_start, v_end, auth.uid()
   );
-  update public.restaurants set online_orders_paid_through = v_end::timestamptz where id = p_rid;
+  update public.restaurants
+  set online_orders_paid_through = (v_end + 1)::timestamp at time zone 'UTC' - interval '1 microsecond'
+  where id = p_rid;
   insert into public.platform_audit(actor, action, restaurant_id, hotel_name, data)
   values (auth.uid(), 'online_order_fee_payment', p_rid, v_restaurant.name,
     jsonb_build_object('amount', p_amount, 'months', p_months, 'period_start', v_start, 'period_end', v_end));
@@ -107,6 +111,7 @@ language plpgsql security definer set search_path = public as $$
 declare v_name text;
 begin
   if not public.is_platform_admin() then raise exception 'not_platform_admin'; end if;
+  if p_hold is null then raise exception 'bad_online_order_hold'; end if;
   if char_length(trim(coalesce(p_reason, ''))) > 300 then raise exception 'bad_online_order_hold_reason'; end if;
   update public.restaurants
   set online_orders_admin_hold = p_hold,
@@ -253,7 +258,7 @@ create or replace function public.submit_online_order_review(
 language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is null or coalesce(auth.jwt() ->> 'app_role', '') <> 'customer' then raise exception 'not_customer'; end if;
-  if p_rating not between 1 and 5 then raise exception 'bad_rating'; end if;
+  if p_rating is null or p_rating not between 1 and 5 then raise exception 'bad_rating'; end if;
   if char_length(trim(coalesce(p_feedback, ''))) > 500 then raise exception 'bad_feedback'; end if;
   update public.online_orders set
     customer_rating = p_rating,
@@ -285,7 +290,7 @@ end $$;
 revoke all on function public.online_order_service_monthly_fee(),
   public.online_order_service_active(uuid),
   public.platform_set_online_order_monthly_fee(int),
-  public.platform_record_online_order_payment(uuid, int, int, text, date, text),
+  public.platform_record_online_order_payment(uuid, int, int, text, text, date, text),
   public.platform_set_online_order_hold(uuid, boolean, text),
   public.platform_online_applications(),
   public.platform_online_order_payments(int),
@@ -296,7 +301,7 @@ from public, anon, authenticated;
 grant execute on function public.online_order_service_monthly_fee(),
   public.online_order_service_active(uuid),
   public.platform_set_online_order_monthly_fee(int),
-  public.platform_record_online_order_payment(uuid, int, int, text, date, text),
+  public.platform_record_online_order_payment(uuid, int, int, text, text, date, text),
   public.platform_set_online_order_hold(uuid, boolean, text),
   public.platform_online_applications(),
   public.platform_online_order_payments(int)

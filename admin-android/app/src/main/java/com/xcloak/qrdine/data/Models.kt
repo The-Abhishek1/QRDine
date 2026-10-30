@@ -380,6 +380,7 @@ data class OnlineOrderServicePayment(
     @SerialName("restaurant_id") val restaurantId: String,
     val amount: Int,
     val months: Int,
+    val method: String,
     @SerialName("paid_on") val paidOn: String,
     val reference: String? = null,
     val note: String? = null,

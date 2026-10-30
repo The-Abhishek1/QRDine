@@ -147,9 +147,9 @@ class PlatformViewModel : ViewModel() {
     fun setOnlineOrderMonthlyFee(amountPaise: Int) = act("Online-order monthly fee updated") {
         repo.setOnlineOrderMonthlyFee(amountPaise)
     }
-    fun recordOnlineOrderPayment(rid: String, amountPaise: Int, months: Int, reference: String, note: String) =
+    fun recordOnlineOrderPayment(rid: String, amountPaise: Int, months: Int, method: String, reference: String, note: String) =
         act("Online-order payment recorded") {
-            repo.recordOnlineOrderPayment(rid, amountPaise, months, reference, note)
+            repo.recordOnlineOrderPayment(rid, amountPaise, months, method, reference, note)
         }
     fun setOnlineOrderHold(app: OnlineApplication, hold: Boolean, reason: String? = null) =
         act(if (hold) "Online orders held for ${app.name}" else "Online-order hold released for ${app.name}") {

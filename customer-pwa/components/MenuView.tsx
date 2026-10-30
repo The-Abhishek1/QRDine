@@ -24,12 +24,13 @@ function Stepper({ qty, onAdd, onRemove, name, canAddMore }: { qty: number; onAd
 
 const hm = (v: string | null) => (v ?? "").slice(0, 5);
 
-export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onConfigure, onlineMode = false }: {
-  menu: Menu; lines: CartLine[]; onQuickAdd: (id: string) => void; onQuickRemove: (id: string) => void; onConfigure: (d: Dish) => void; onlineMode?: boolean;
+export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onConfigure, onRefresh, onlineMode = false }: {
+  menu: Menu; lines: CartLine[]; onQuickAdd: (id: string) => void; onQuickRemove: (id: string) => void; onConfigure: (d: Dish) => void; onRefresh?: () => Promise<void>; onlineMode?: boolean;
 }) {
   const { t, pick } = useI18n();
   const [vegOnly, setVegOnly] = useState(false);
   const [q, setQ] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const groups = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -46,6 +47,16 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
       .filter((g) => g.dishes.length > 0);
   }, [menu, vegOnly, q]);
 
+  async function refreshMenu() {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   return (
     <div>
       <div className="tools">
@@ -54,6 +65,12 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
           <input type="checkbox" checked={vegOnly} onChange={(e) => setVegOnly(e.target.checked)} />
           <span><VegMark veg /> {t("vegOnly")}</span>
         </label>
+        {onRefresh && (
+          <button className="menu-refresh" type="button" onClick={() => void refreshMenu()} disabled={refreshing} aria-label="Refresh menu">
+            <span aria-hidden="true">{refreshing ? "…" : "↻"}</span>
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+        )}
       </div>
       {!!menu.offers?.length && (
         <section className="offers" aria-label={t("offers")}>
