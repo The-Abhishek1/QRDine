@@ -372,8 +372,9 @@ fun CustomerAppScreen() {
                         val cartCount = cart.sumOf { it.qty }
                         val subtotal = cart.sumOf { it.qty * it.unitPrice }
                         LazyColumn(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             item(key = "menu-search") {
                                 OutlinedTextField(
@@ -540,8 +541,8 @@ fun CustomerAppScreen() {
                             ) { Text("Continue to checkout") }
                         }
                         activeOrder?.let { order ->
-                            GlassCard(Modifier.fillMaxWidth()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GlassCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Order ${order.id.take(8)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -573,17 +574,19 @@ fun CustomerAppScreen() {
                                         HorizontalDivider()
                                         Text("Items", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                         order.items.forEach { item ->
-                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text("${item.qty} × ${item.name}" + (item.variantName?.let { " · $it" } ?: ""), Modifier.weight(1f))
-                                                Text(((item.qty - item.offerFreeQty).coerceAtLeast(0) * item.unitPrice).rupees())
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text("${item.qty} × ${item.name}" + (item.variantName?.let { " · $it" } ?: ""), Modifier.weight(1f))
+                                                    Text(((item.qty - item.offerFreeQty).coerceAtLeast(0) * item.unitPrice).rupees())
+                                                }
+                                                item.offerFreeQty.takeIf { it > 0 }?.let {
+                                                    Text("$it free with offer", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                                }
+                                                item.addons.takeIf { it.isNotEmpty() }?.let { addons ->
+                                                    Text("Add-ons: ${addons.joinToString { addon -> addon.name }}", style = MaterialTheme.typography.bodySmall)
+                                                }
+                                                item.instructions?.takeIf(String::isNotBlank)?.let { Text("Note: $it", style = MaterialTheme.typography.bodySmall) }
                                             }
-                                            item.offerFreeQty.takeIf { it > 0 }?.let {
-                                                Text("$it free with offer", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                            }
-                                            item.addons.takeIf { it.isNotEmpty() }?.let { addons ->
-                                                Text("Add-ons: ${addons.joinToString { addon -> addon.name }}", style = MaterialTheme.typography.bodySmall)
-                                            }
-                                            item.instructions?.takeIf(String::isNotBlank)?.let { Text("Note: $it", style = MaterialTheme.typography.bodySmall) }
                                         }
                                     }
                                     HorizontalDivider()
@@ -658,23 +661,39 @@ fun CustomerAppScreen() {
                             }
                         }
                         if (customerOrders.isNotEmpty()) {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text("Your recent orders", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                TextButton(onClick = {
-                                    scope.launch {
-                                        try {
-                                            customerOrders = QrDineApp.container.customer.orders()
-                                            error = null
-                                        } catch (e: Exception) {
-                                            Diagnostics.record(QrDineApp.appContext, e, "customer-orders-refresh")
-                                            error = "Could not refresh your order status. Please try again."
+                            Column(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Your recent orders", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    TextButton(onClick = {
+                                        scope.launch {
+                                            try {
+                                                customerOrders = QrDineApp.container.customer.orders()
+                                                error = null
+                                            } catch (e: Exception) {
+                                                Diagnostics.record(QrDineApp.appContext, e, "customer-orders-refresh")
+                                                error = "Could not refresh your order status. Please try again."
+                                            }
+                                        }
+                                    }) { Text("Refresh") }
+                                }
+                                customerOrders.filter { it.restaurantId == restaurant.id }.take(5).forEach { order ->
+                                    Card(
+                                        onClick = { activeOrder = order },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(14.dp),
+                                    ) {
+                                        Row(
+                                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text("${order.id.take(8)} · ${order.status.uppercase()}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                            Text(order.total.rupees(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                                         }
                                     }
-                                }) { Text("Refresh") }
-                            }
-                            customerOrders.filter { it.restaurantId == restaurant.id }.take(5).forEach { order ->
-                                TextButton(onClick = { activeOrder = order }) {
-                                    Text("${order.id.take(8)} · ${order.status.uppercase()} · ${order.total.rupees()}")
                                 }
                             }
                         }
@@ -732,7 +751,6 @@ fun CustomerAppScreen() {
                             }
                         } else {
                             item {
-                                Text("Find your next favourite", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                 Text("Search by restaurant name or area.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -824,7 +842,6 @@ fun CustomerAppScreen() {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Your orders", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                 Text("Track recent orders and payment status.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             IconButton(onClick = {
@@ -923,6 +940,7 @@ fun CustomerAppScreen() {
                                 enabled = customerRoleReady,
                             ) { Text(if (customerProfile == null) "Complete profile" else "Edit profile") }
                         }
+                        ThemePreferenceCard()
                     }
                 }
             }
@@ -1054,6 +1072,7 @@ private fun CustomerPhoto(url: String?, label: String, modifier: Modifier = Modi
             model = url,
             contentDescription = "$label image",
             contentScale = ContentScale.Crop,
+            alignment = Alignment.Center,
             modifier = modifier.clip(RoundedCornerShape(14.dp)),
             onError = { failed = true },
         )
