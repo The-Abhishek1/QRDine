@@ -1,56 +1,102 @@
-# QR Dine customer PWA (Next.js 15)
+# QR Dine Customer PWA
 
-    cp .env.example .env.local     # set the functions URL, Supabase URL and public anon key
-    npm install
-    npm run dev                    # http://<your-LAN-IP>:3000 ; QR links look like /t/<signed-token>
-    npm run build && npm start     # production check
+The customer PWA is a Next.js application for two distinct guest journeys:
 
-Deploy anywhere that runs Next.js (Vercel, Cloudflare, your VPS). The table-ordering PWA uses Edge Functions;
-customer sign-in also requires the public Supabase anon key in `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Never use a
-service-role key in the PWA. Set PWA_BASE_URL and PWA_ORIGIN in Supabase secrets to this site's https origin.
+1. **Table QR ordering** at `/t/<signed-token>` using a restaurant-issued QR code.
+2. **Online ordering** at `/explore`, with customer authentication and delivery or pickup from approved restaurants.
 
-Included: scan -> menu (search, veg filter, sections, sold-out, restaurant offers) -> cart (eat here / parcel, note) -> order ->
-status with ready-by time -> running bill -> call waiter / request bill. Table-closed, PIN, shop-closed and
-session-ended screens. Cart survives reloads; double taps and bad networks never create duplicate orders.
-Bill with GST breakdown, Request bill only after everything is served, Pay with UPI button, thank-you and review after payment.
-Before launch add app icons to `app/manifest.ts` so it can be installed to the home screen.
+The PWA does not replace the restaurant Android app. Restaurant owners and staff use Android to manage menus and incoming orders.
 
-## Customer online ordering
-`/explore` is separate from table QR ordering. Customers sign in with a customer account, complete a profile
-(name, Indian mobile number, address, and PIN code), browse approved restaurants, and submit delivery or pickup
-orders with menu variants and add-ons. Restaurant owners submit an online-order application for platform-admin
-approval, configure fulfilment/payment settings, and can disable their online listing or individual dishes.
-Owners and waiters manage the resulting orders in the Android app.
+## Requirements
 
-UPI orders require a customer-submitted transaction reference and manual restaurant verification; opening a UPI
-app does not verify or guarantee payment. COD starts disabled platform-wide. A platform admin must enable the
-global COD switch before restaurants can opt in; the restaurant and platform switches are both enforced when an
-order is placed.
+- Node.js and npm
+- A Supabase project with the required database migrations and Edge Functions deployed
+- Supabase public anon/publishable key for customer authentication
 
-For local development, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
-For Vercel, add both as project Environment Variables for the production deployment and redeploy; the public
-anon key is required for customer authentication and must never be replaced with a service-role key.
-`NEXT_PUBLIC_SUPABASE_URL` can be inferred from `NEXT_PUBLIC_API_BASE` when that is already configured.
-Apply migrations `20261028000002_online_order_settings.sql`,
-`20261028000003_customer_accounts.sql`, and `20261028000004_online_ordering.sql`, and deploy the
-`online-restaurants` and `online-menu` Edge Functions. Adding a Vercel anon key alone does not configure the
-Supabase Auth custom access-token hook. In Supabase Authentication → Hooks, enable Custom Access Token for
-`public.custom_access_token_hook`, then sign out and back in so a fresh token contains `app_role=customer`.
-The setting in `backend/supabase/config.toml` enables the hook for local Supabase. Never put a service-role key
-in the PWA.
-Existing table QR ordering continues through `/t/<signed-token>` and is not replaced by `/explore`.
+## Configure
 
-## M6 additions
-Sizes and extras with a pick-options sheet, special instructions per dish, "people also order" and bestseller badges, timed menu sections,
-low-stock tags, guest coupon box, "ready" status, language switcher (English + Hindi/Kannada labels; dish names in any language the hotel adds),
-instant updates (optional env vars, see `.env.example`), installable on the home screen over https (icons + service worker; never caches table pages).
-Run `npm install` again: a new dependency (`@supabase/supabase-js`) was added for the instant updates.
+```bash
+cp .env.example .env.local
+```
 
-## M7 offers
-Active Buy N Get M offers appear above the menu. Customers add the qualifying dish and reward dish; the cheapest eligible reward units
-are discounted automatically in the cart and order. Add-on groups default to optional; customers can add extras without being forced to
-choose them. Deploy the M7 backend migration and Edge Functions with the matching `config.toml` before deploying this PWA.
+Set these variables in `.env.local`:
 
-## Legal pages
-Public privacy and terms pages are available at `/privacy` and `/terms`, and linked in the site footer. Review the wording
-with qualified counsel and confirm the operator/contact details before using these pages for a public or store submission.
+| Variable | Required | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_API_BASE` | Yes | Supabase Edge Functions base URL, ending in `/functions/v1` |
+| `NEXT_PUBLIC_SUPABASE_URL` | For online accounts; recommended | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | For online accounts; recommended | Public anon/publishable key |
+
+Example:
+
+```dotenv
+NEXT_PUBLIC_API_BASE=https://YOUR_PROJECT_REF.supabase.co/functions/v1
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
+```
+
+Only use the public anon/publishable key in this browser app. **Never** add a service-role key or QR signing secret to a `NEXT_PUBLIC_*` variable.
+
+## Run locally
+
+From `customer-pwa/`:
+
+```bash
+npm ci
+npm run dev
+```
+
+Open `http://localhost:3000`. To test QR links from a phone, use a reachable HTTPS or LAN origin and configure the backend's `PWA_BASE_URL` and `PWA_ORIGIN` to match.
+
+Production build check:
+
+```bash
+npm run build
+npm start
+```
+
+## Ordering flows
+
+### Table QR orders
+
+The QR flow validates the signed token through `session-join`, loads table/menu state, and submits orders through backend functions. It supports menu categories and search, sizes, optional extras, notes, restaurant offers, cart, order status, bill requests, UPI payment handoff, and post-order reviews. Session tokens and server-side pricing prevent the browser from deciding trusted prices or restaurant identity.
+
+### Online orders
+
+Customers register/sign in with a customer account, complete their delivery profile, browse the approved online restaurant directory, and place delivery or pickup orders. The PWA displays order status, items, fees, payment state, and feedback controls. Online ordering requires:
+
+- The customer-account and online-ordering migrations.
+- `online-restaurants` and `online-menu` Edge Functions.
+- The Supabase custom access-token hook enabled for `public.custom_access_token_hook`.
+- The public Supabase URL and anon/publishable key configured in this app.
+
+After enabling the Auth hook, customers should sign out and back in so their access token contains `app_role=customer`. Adding the key to a hosting provider alone does not enable customer permissions.
+
+UPI payment handoff does not verify payment. The restaurant must check the transfer and confirm it using the configured order workflow. COD is subject to platform and restaurant settings.
+
+## Backend deployment
+
+Follow the [backend deployment guide](../backend/README.md). In summary, apply the required migrations, deploy the relevant Edge Functions, enable the custom Auth hook, and configure the PWA origin and QR signing secret as backend secrets. Existing table QR ordering continues to use `/t/<signed-token>` independently of `/explore`.
+
+## Deploy
+
+Deploy to any host that supports Next.js 15. For Vercel:
+
+1. Set the three environment variables above in the project settings.
+2. Ensure the variables are available to the target deployment environment.
+3. Deploy or redeploy after changing environment values.
+4. Configure the backend PWA origin/base URL to the deployed HTTPS origin.
+5. Test customer signup/sign-in, table QR entry, menu loading, and order status on the deployed site.
+
+The PWA uses a web manifest and service worker for installability. Do not cache authenticated customer data or active table-session data in a way that could expose it on a shared device.
+
+## Troubleshooting
+
+- **Customer role/permission error:** Enable the Supabase custom access-token hook and sign in again to refresh the token.
+- **Online directory/menu does not load:** Check the Supabase URL/key, deployed `online-restaurants`/`online-menu` functions, and function/database logs.
+- **QR link fails:** Verify the QR signing secret, PWA base URL/origin, signed token, and deployed `session-join` function.
+- **Build fails after dependency changes:** Run `npm ci` to install the committed lockfile dependencies.
+
+## Privacy and security
+
+Treat customer profile, order, payment-reference, and review data as sensitive. Use RLS and backend authorization as the security boundary. Do not log secrets or include service credentials in frontend code. Review `/privacy` and `/terms` and confirm operator/contact details before public release.

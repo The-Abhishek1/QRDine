@@ -95,7 +95,11 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
     var customerAccount by rememberSaveable { mutableStateOf(false) }
 
     val colors = MaterialTheme.colorScheme
-    Surface(Modifier.fillMaxSize(), color = Color.Transparent) {
+    Surface(
+        Modifier.fillMaxSize(),
+        color = Color.Transparent,
+        contentColor = colors.onSurface,
+    ) {
         Column(
             Modifier
                 .fillMaxSize()

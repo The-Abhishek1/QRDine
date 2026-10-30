@@ -7,6 +7,8 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -24,11 +26,17 @@ class SignInIdentityException(val localSessionCleared: Boolean) :
     Exception("The authenticated account did not match the sign-in email.")
 
 class CustomerAccountRequiredException : Exception("Sign in with a customer account to browse restaurants.")
+class RestaurantAccountRequiredException : Exception("Sign in with a restaurant account to manage a restaurant.")
+class AccountTypeSessionClearException(cause: Exception) : Exception("Could not clear the mismatched account session.", cause)
+
+enum class SignInRoutingState { READY, VALIDATING, REJECTED }
 
 class AuthRepository(private val sb: SupabaseClient) {
     val status get() = sb.auth.sessionStatus
+    private val _signInRoutingState = MutableStateFlow(SignInRoutingState.READY)
+    val signInRoutingState = _signInRoutingState.asStateFlow()
 
-    suspend fun signIn(email: String, password: String) {
+    private suspend fun authenticate(email: String, password: String) {
         sb.auth.clearSession()
         sb.auth.signInWith(Email) {
             this.email = email.trim()
@@ -49,15 +57,61 @@ class AuthRepository(private val sb: SupabaseClient) {
     }
 
     suspend fun signInCustomer(email: String, password: String) {
-        signIn(email, password)
-        val token = sb.auth.currentAccessTokenOrNull()
-        val role = token?.let { Jwt.claim(it, "app_role") }
-        val isCustomerAccount = sb.auth.currentSessionOrNull()?.user?.userMetadata
-            ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
-        if (role != "customer" && !(role == null && isCustomerAccount)) {
-            sb.auth.clearSession()
-            throw CustomerAccountRequiredException()
+        _signInRoutingState.value = SignInRoutingState.VALIDATING
+        try {
+            authenticate(email, password)
+            if (!isCustomerAccount()) {
+                rejectMismatchedAccount()
+                throw CustomerAccountRequiredException()
+            }
+            _signInRoutingState.value = SignInRoutingState.READY
+        } finally {
+            if (_signInRoutingState.value == SignInRoutingState.VALIDATING) {
+                _signInRoutingState.value = if (sb.auth.currentSessionOrNull() == null) {
+                    SignInRoutingState.READY
+                } else {
+                    SignInRoutingState.REJECTED
+                }
+            }
         }
+    }
+
+    suspend fun signInRestaurant(email: String, password: String) {
+        _signInRoutingState.value = SignInRoutingState.VALIDATING
+        try {
+            authenticate(email, password)
+            if (isCustomerAccount()) {
+                rejectMismatchedAccount()
+                throw RestaurantAccountRequiredException()
+            }
+            _signInRoutingState.value = SignInRoutingState.READY
+        } finally {
+            if (_signInRoutingState.value == SignInRoutingState.VALIDATING) {
+                _signInRoutingState.value = if (sb.auth.currentSessionOrNull() == null) {
+                    SignInRoutingState.READY
+                } else {
+                    SignInRoutingState.REJECTED
+                }
+            }
+        }
+    }
+
+    private suspend fun rejectMismatchedAccount() {
+        _signInRoutingState.value = SignInRoutingState.REJECTED
+        try {
+            sb.auth.clearSession()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw AccountTypeSessionClearException(e)
+        }
+    }
+
+    private fun isCustomerAccount(): Boolean {
+        val role = sb.auth.currentAccessTokenOrNull()?.let { Jwt.claim(it, "app_role") }
+        val customerMetadata = sb.auth.currentSessionOrNull()?.user?.userMetadata
+            ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
+        return role == "customer" || (role == null && customerMetadata)
     }
 
     fun customerRoleConfigured(): Boolean =
@@ -68,7 +122,7 @@ class AuthRepository(private val sb: SupabaseClient) {
         sb.auth.signUpWith(Email, redirectUrl = AUTH_REDIRECT_URL) {
             this.email = email.trim()
             this.password = password
-            if (accountType != null) data = buildJsonObject { put("account_type", accountType) }
+            data = buildJsonObject { put("account_type", accountType ?: "restaurant") }
         }
         return sb.auth.currentSessionOrNull() != null
     }

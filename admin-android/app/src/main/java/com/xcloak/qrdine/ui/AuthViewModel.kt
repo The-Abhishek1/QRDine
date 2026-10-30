@@ -8,6 +8,8 @@ import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.SignInIdentityException
 import com.xcloak.qrdine.data.SignOutException
 import com.xcloak.qrdine.data.CustomerAccountRequiredException
+import com.xcloak.qrdine.data.RestaurantAccountRequiredException
+import com.xcloak.qrdine.data.AccountTypeSessionClearException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,14 +38,14 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 if (signUp) {
-                    val started = auth.signUp(email, password, if (customerAccount) "customer" else null)
+                    val started = auth.signUp(email, password, if (customerAccount) "customer" else "restaurant")
                     _state.value = if (started) AuthUiState()
                     else AuthUiState(
                         info = "We sent a confirmation link to your email. Confirm it before signing in.",
                         verificationPending = true,
                     )
                 } else {
-                    if (customerAccount) auth.signInCustomer(email, password) else auth.signIn(email, password)
+                    if (customerAccount) auth.signInCustomer(email, password) else auth.signInRestaurant(email, password)
                     _state.value = AuthUiState()
                 }
             } catch (e: Exception) {
@@ -57,6 +59,10 @@ class AuthViewModel : ViewModel() {
                         }
                     } else if (e is CustomerAccountRequiredException) {
                         "That account is not a customer account. Use the restaurant sign-in option, or create a customer account."
+                    } else if (e is RestaurantAccountRequiredException) {
+                        "That account is a customer account. Choose the customer sign-in option instead."
+                    } else if (e is AccountTypeSessionClearException) {
+                        "The account type did not match, and we couldn't safely clear the session. Restart the app before trying another account."
                     } else authError(e),
                 )
             }

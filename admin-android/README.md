@@ -1,94 +1,105 @@
-# QR Dine Admin (Android), M1
+# QR Dine Android
 
-Kotlin + Jetpack Compose, supabase-kt. Package: com.xcloak.qrdine, minSdk 26.
+The Android app is a Kotlin and Jetpack Compose application for restaurant owners and staff, platform administrators, and customers. The same app provides separate role-based areas after authentication.
 
-## Run
-1. Android Studio > Open > this folder. Let Gradle sync (JDK 17 = Studio's bundled JDK).
-2. Copy `local.properties.example` into `local.properties`, add SUPABASE_URL and SUPABASE_ANON_KEY
-   (Supabase dashboard > Project Settings > API). Rebuild.
-3. Configure Supabase Authentication > URL Configuration:
-   - Add `qrdine://auth/callback` to the allowed redirect URLs.
-   - Enable email confirmation when ready to require owners to verify their address.
-   - Configure a production SMTP/email provider; Supabase's default mail service is limited and is not intended for production delivery.
-4. Run on a device or emulator.
+| Account | App area |
+|---|---|
+| Restaurant owner | Orders, online orders, tables, menu, insights, settings, staff, and restaurant service configuration |
+| Waiter or kitchen staff | Role-limited restaurant operations |
+| Platform administrator | Restaurant applications, subscription/payment records, and platform settings |
+| Customer | Restaurant discovery, online menus, delivery/pickup orders, order history, and profile |
 
-## Owner account email flows
-- With email confirmation enabled, sign-up sends a verification link. The sign-in screen offers a resend action while confirmation is pending.
-- Owners can choose **Forgot password?** to request a reset link, then set a new password in the app after opening it.
-- Both flows redirect to `qrdine://auth/callback`. Keep this URL allowlisted in Supabase, and make sure the email templates use the requested redirect URL.
-- For local development, confirmation can be disabled in Authentication > Providers > Email; sign-up then creates an active session immediately.
-- Privacy and terms links are available from sign-in and Settings, opening the public PWA pages at `https://qr-dine-admin.vercel.app/privacy` and `/terms`.
-  Review those pages with qualified counsel and confirm the legal operator/contact details before store submission.
-- Crashes and selected auth, setup, order, menu, table, settings, printer, and QR-generation errors are collected only if
-  the user opts in under Settings > This device. Reports are queued locally and uploaded after sign-in to the Supabase
-  `app-diagnostics` function. Users can disable reporting (which deletes the local queue) or clear queued reports.
-  Platform > Settings lists recent reports. Apply the diagnostics migration and deploy that function from `backend/README.md`
-  to enable remote reporting; reports older than 30 days are deleted.
+Package: `com.xcloak.qrdine` · Minimum Android version: API 26 · Java/Kotlin target: 17.
 
-## M1 includes
-Email/password sign-up and sign-in, restaurant setup (create_restaurant rpc + token refresh),
-menu manager: categories (food/beverage), dishes with photo upload (compressed under 1 MB),
-veg/non-veg, price, out-of-stock switch, soft delete. Everything goes through RLS as the owner.
-The menu CSV guide can download a language-aware template and import/export category and dish
-translations, vegetarian status, base prices, and named sizes with per-size prices. Optional original
-prices are shown as sale strike-throughs and must be higher than their matching selling price.
-CSV does not model add-on groups/options, photos, stock, or availability; those remain managed
-separately in the menu editor. The schema stores a size/variant's name and price, not a numeric
-quantity (for example, "Half" and "Full" are names).
+## Requirements
 
-## Acceptance checks
-- Two accounts, two restaurants: neither can see the other's categories or dishes.
-- Dish photo appears after save; stock switch changes immediately and survives a restart.
-- Killing the app and reopening keeps you signed in.
+- Android Studio with JDK 17
+- Android SDK configured by Android Studio
+- A Supabase project with the backend migrations and Edge Functions required by the selected features
 
-## M2a: tables and QR codes
-Bottom bar: Menu | Tables. Tables: add tables (T1, T2, ...), open a table (optional 4-digit code), cancel an empty
-session, remove a closed table, print QR codes as an A4 PDF (4 per page, share/print), replace all QR codes.
-QR links are signed by the `qr-sheet` Edge Function; deploy it first (see backend/README.md).
-Table status refreshes every 8 s while the screen is open (realtime and the order alerts come in M3).
+## Configure Supabase
 
-## M3: orders and alerts
-Tabs: Orders | Menu | Tables (badge on Orders = things waiting for you).
-- Orders: "Open for orders" switch (this is `restaurants.is_open`; guests see "not taking orders" when off).
-  Needs you now: waiter/bill requests (Done) and pending orders (Accept with a wait time, or Reject with a reason).
-  Cooking: accepted orders (Mark served). Two devices can be logged in: the first to act wins, the other is told.
-- Live updates: realtime change events trigger a reload, with a 20 s poll as a safety net.
-- Alerts: while open, a foreground service re-rings every 30 s until nothing is waiting (a new order rings at once).
-  Pending customer online orders count in the owner alert badge and repeat alerts. With `google-services.json`
-  present, FCM pushes also wake the app when the system killed it.
-  The first launch asks for notification permission; the Orders menu has "Make alerts reliable" (battery and
-  autostart steps). Settings > This device can turn alert sounds off on this phone; visual alerts remain enabled.
-  Signing out stops the alerts and unregisters this phone from pushes.
-- Without `app/google-services.json` the app still builds and runs; only killed-app pushes are off.
-Play Console note: the alert service uses the `specialUse` foreground service type, which needs a short
-declaration in the app content form ("keeps a live connection to alert the owner to customer orders").
+Copy `local.properties.example` to `local.properties` and set:
 
-## M4: billing, serving view, insights, settings
-Five tabs: Orders | Tables | Menu | Insights | Settings.
-- Orders > Needs action: new orders (accept with wait time / reject), waiter calls, bill requests ("Open bill"), cooking orders.
-- Orders > Serving: every table in service with running total, what is waiting/cooking/served. Served orders stay here
-  until the bill is paid. Tap a table (also from the Tables tab) for the bill screen: every dish, taxes, coupon code,
-  Cash / UPI / Cash + UPI, "Mark paid". That closes the table, numbers the bill, thanks the guest, and offers a PDF to share/print.
-- Insights: today / 7 / 30 days / this month. Revenue per day, cash vs UPI, top and slowest dishes, busy hours, reviews
-  (newest or lowest first), recent bills (tap to reprint), CSV export for your accountant.
-- Settings: restaurant name, photo, address, phone, FSSAI; GST mode/rate/GSTIN, service charge, UPI ID; ordering mode;
-  announcement and coupons; Alert health (checklist + test alert); email, change password, sign out.
-- Menu: rename or delete a category (a category must be empty to delete).
-- Menu: Extras and Offers are available directly from the menu screen. Existing extras are made optional; groups can still be configured
-  with a minimum if a restaurant specifically needs a required choice. Create Buy N Get M offers for the same dish or a different free dish.
-- Alerts also ring from the alert service itself (alarm tone + vibration), so they no longer depend only on notification settings.
+```properties
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
+```
 
-## M5: platform admin area, approval flow, sales downloads, polish
-Same app, three kinds of sign-in:
-- **Hotel owner, not yet approved**: after signing up they fill in the restaurant and see "Application submitted, waiting for the admin's approval".
-  The screen checks by itself and opens the app the moment you approve. Rejected or held hotels see your message and your support contact.
-- **Approved hotel owner**: the normal app. Renewal banners appear 7 days before the trial or subscription ends, when overdue, and when ended.
-- **You (platform admin)**: Dashboard (applications waiting, active, trial, overdue, collected money), Hotels (search, filters,
-  approve / reject / hold / release / edit / extend / adjust dates / reset password / delete, export CSV), Payments (cash, UPI or bank ledger,
-  record payments, export CSV), Settings (support phone/email and "how to pay" shown to hotels, your password, activity log).
-Hotel owners can now download a **sales summary PDF** for today, 7 days, 30 days, this month or any custom date range
-(Insights tab), plus the bills CSV.
-Polish: brand theme (light and dark), splash screen, app icon, show/hide password, consistent screens.
-The shared UI theme uses translucent surfaces and a soft, adaptive gradient backdrop for a glass-style finish across auth,
-owner, kitchen and platform-admin screens.
-Create your platform admin login first: see backend/README.md (M5).
+Android Studio may add `sdk.dir` to `local.properties`. This file is local and must not be committed. Use only the Supabase public anon/publishable key in the client. Never embed a service-role key or backend signing secret.
+
+In Supabase Auth, allow the redirect URL:
+
+```text
+qrdine://auth/callback
+```
+
+Configure email confirmation and a production SMTP provider before public use. Enable the `public.custom_access_token_hook` for customer role claims; customer accounts need a fresh token after the hook is enabled.
+
+## Build and test
+
+Open this directory in Android Studio and allow Gradle sync, or run:
+
+```bash
+./gradlew testDebugUnitTest assembleDebug
+```
+
+The debug APK is written under `app/build/outputs/apk/debug/`. Push notifications are optional: the app builds without `app/google-services.json`, but FCM delivery while the app is killed will be unavailable.
+
+## Authentication and account types
+
+The sign-in screen separates **Restaurant** and **Customer** access. Account type is validated after Supabase authenticates credentials but before the app routes to a dashboard:
+
+- Customer accounts must use Customer sign-in.
+- Restaurant/platform/staff accounts must use Restaurant sign-in.
+- A mismatch shows an error on the sign-in screen; it should not briefly open the other dashboard.
+- New signups are tagged as `customer` or `restaurant`. Restaurant owners complete restaurant setup separately.
+
+Platform administrator accounts are provisioned by an administrator in Supabase; do not create them through ordinary customer or restaurant signup. See the [backend guide](../backend/README.md).
+
+## Customer app
+
+The customer area includes restaurant discovery and search, online menus with categories and dish options, centered restaurant imagery, cart and checkout, delivery/pickup order details, order history, feedback, and profile settings. Light, dark, and system appearance choices are persisted on the device.
+
+Customer checkout requires the customer account migration, online-order settings/order migrations, deployed `online-restaurants` and `online-menu` functions, and the Supabase Auth custom access-token hook. A public anon key alone does not enable customer permissions.
+
+## Restaurant operations
+
+- **Orders:** Table order requests, waiter/bill requests, online order attention, status actions, and refresh.
+- **Online orders:** Accept or reject customer delivery/pickup orders and review their payment/customer details.
+- **Menu:** Categories, dishes, photos, availability, sizes, stock, optional add-ons, and Buy N Get M offers.
+- **Tables:** Table sessions and QR code generation.
+- **Insights:** Sales, dishes, order channels, reviews/feedback, and date-range reporting.
+- **Settings:** Restaurant details, online ordering, alerts, account, and appearance.
+
+Capabilities shown in the app require matching database migrations, Edge Functions, and Supabase project configuration. Consult the [backend README](../backend/README.md) before enabling a feature in production.
+
+## Optional FCM push notifications
+
+1. Register package `com.xcloak.qrdine` in Firebase.
+2. Place the appropriate `google-services.json` in `app/` (do not commit production secrets).
+3. Configure Firebase service credentials and the webhook secret as Supabase function secrets.
+4. Deploy the `notify` function and configure the required database webhooks.
+
+Realtime refresh and in-app alerts can work without FCM. See the backend guide for complete webhook setup.
+
+## Owner email flows and privacy
+
+- Email-confirmation signup offers a resend action when confirmation is pending.
+- **Forgot password?** sends a reset link; the reset flow returns through `qrdine://auth/callback`.
+- Privacy and terms are available from the sign-in and restaurant settings screens.
+- Android diagnostics are opt-in under Settings > This device. Remote reports require the diagnostics migration and `app-diagnostics` function.
+
+Review the legal pages, diagnostics disclosure, and operator contact details before publishing the app.
+
+## Troubleshooting
+
+- **Customer permissions are unavailable:** Enable the Supabase custom access-token hook and sign out/in to obtain a fresh customer-role token.
+- **Account-type message appears:** Choose the matching Restaurant or Customer sign-in section. A customer account cannot manage a restaurant.
+- **Restaurant setup fails:** Confirm the required migrations are deployed and the authenticated account is a restaurant owner account.
+- **No push notifications:** Check Firebase configuration, notification permission, function secrets, and database webhooks. Push is optional.
+- **Supabase request fails:** Verify `local.properties`, deployed functions, migration state, Auth redirect URL, and project logs.
+
+## Security
+
+Client-side role routing improves UX but is not the security boundary. Supabase RLS, token claims, and Edge Function authorization must enforce access. Never put service-role credentials, QR signing secrets, or webhook secrets in Android resources, `local.properties`, or client-visible code.

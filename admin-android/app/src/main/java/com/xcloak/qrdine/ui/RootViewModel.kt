@@ -2,14 +2,15 @@ package com.xcloak.qrdine.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xcloak.qrdine.data.SignInRoutingState
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.Jwt
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 sealed interface RootState {
@@ -27,25 +28,29 @@ sealed interface RootState {
 class RootViewModel : ViewModel() {
     private val auth = QrDineApp.container.auth
 
-    val state: StateFlow<RootState> = auth.status.map { s ->
-        when (s) {
-            is SessionStatus.Authenticated -> {
-                val token = s.session.accessToken
-                val role = Jwt.claim(token, "app_role")
-                val rid = Jwt.claim(token, "restaurant_id")
-                val customerMetadata = s.session.user?.userMetadata
-                    ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
-                when {
-                    role == "platform_admin" -> RootState.Platform
-                    role == "customer" -> RootState.Customer
-                    (role == "owner" || role == "waiter" || role == "kitchen") && rid != null -> RootState.Ready(rid, role)
-                    role == "owner_blocked" -> RootState.Blocked(Jwt.claim(token, "hotel_status") ?: "pending")
-                    role == null && customerMetadata -> RootState.Customer
-                    else -> RootState.NeedsRestaurant
+    val state: StateFlow<RootState> = combine(auth.status, auth.signInRoutingState) { sessionStatus, routingState ->
+        when (routingState) {
+            SignInRoutingState.VALIDATING -> RootState.Loading
+            SignInRoutingState.REJECTED -> RootState.SignedOut
+            SignInRoutingState.READY -> when (sessionStatus) {
+                is SessionStatus.Authenticated -> {
+                    val token = sessionStatus.session.accessToken
+                    val role = Jwt.claim(token, "app_role")
+                    val rid = Jwt.claim(token, "restaurant_id")
+                    val customerMetadata = sessionStatus.session.user?.userMetadata
+                        ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
+                    when {
+                        role == "platform_admin" -> RootState.Platform
+                        role == "customer" -> RootState.Customer
+                        (role == "owner" || role == "waiter" || role == "kitchen") && rid != null -> RootState.Ready(rid, role)
+                        role == "owner_blocked" -> RootState.Blocked(Jwt.claim(token, "hotel_status") ?: "pending")
+                        role == null && customerMetadata -> RootState.Customer
+                        else -> RootState.NeedsRestaurant
+                    }
                 }
+                is SessionStatus.NotAuthenticated -> RootState.SignedOut
+                else -> RootState.Loading
             }
-            is SessionStatus.NotAuthenticated -> RootState.SignedOut
-            else -> RootState.Loading
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RootState.Loading)
 }

@@ -1065,13 +1065,18 @@ private fun CustomerRestaurantHero(
 }
 
 @Composable
-private fun CustomerPhoto(url: String?, label: String, modifier: Modifier = Modifier) {
+private fun CustomerPhoto(
+    url: String?,
+    label: String,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
     var failed by remember(url) { mutableStateOf(false) }
     if (!url.isNullOrBlank() && !failed) {
         AsyncImage(
             model = url,
             contentDescription = "$label image",
-            contentScale = ContentScale.Crop,
+            contentScale = contentScale,
             alignment = Alignment.Center,
             modifier = modifier.clip(RoundedCornerShape(14.dp)),
             onError = { failed = true },
