@@ -31,12 +31,14 @@ For local development, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_
 For Vercel, add both as project Environment Variables for the production deployment and redeploy; the public
 anon key is required for customer authentication and must never be replaced with a service-role key.
 `NEXT_PUBLIC_SUPABASE_URL` can be inferred from `NEXT_PUBLIC_API_BASE` when that is already configured.
-Apply migrations
-`20261028000002_online_order_settings.sql`, `20261028000003_customer_accounts.sql`, and
-`20261028000004_online_ordering.sql`, and deploy the `online-restaurants` and `online-menu` Edge Functions.
-Ensure Supabase Authentication's custom access token hook is enabled for `public.custom_access_token_hook`.
-Never put a service-role key in the PWA. Existing table QR ordering continues through `/t/<signed-token>` and is
-not replaced by `/explore`.
+Apply migrations `20261028000002_online_order_settings.sql`,
+`20261028000003_customer_accounts.sql`, and `20261028000004_online_ordering.sql`, and deploy the
+`online-restaurants` and `online-menu` Edge Functions. Adding a Vercel anon key alone does not configure the
+Supabase Auth custom access-token hook. In Supabase Authentication → Hooks, enable Custom Access Token for
+`public.custom_access_token_hook`, then sign out and back in so a fresh token contains `app_role=customer`.
+The setting in `backend/supabase/config.toml` enables the hook for local Supabase. Never put a service-role key
+in the PWA.
+Existing table QR ordering continues through `/t/<signed-token>` and is not replaced by `/explore`.
 
 ## M6 additions
 Sizes and extras with a pick-options sheet, special instructions per dish, "people also order" and bestseller badges, timed menu sections,

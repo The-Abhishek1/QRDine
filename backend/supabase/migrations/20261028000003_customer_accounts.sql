@@ -1,5 +1,6 @@
 -- Customer accounts use Supabase Auth like owner accounts, but receive a separate
--- application role and can never inherit a restaurant role from user metadata.
+-- application role. Enable this function as the custom access-token hook in
+-- Supabase Auth settings so customer RPCs receive app_role=customer.
 create or replace function public.custom_access_token_hook(event jsonb) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare

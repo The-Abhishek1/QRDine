@@ -24,7 +24,6 @@ class SignInIdentityException(val localSessionCleared: Boolean) :
     Exception("The authenticated account did not match the sign-in email.")
 
 class CustomerAccountRequiredException : Exception("Sign in with a customer account to browse restaurants.")
-class CustomerRoleNotConfiguredException : Exception("Customer access is not enabled for this project.")
 
 class AuthRepository(private val sb: SupabaseClient) {
     val status get() = sb.auth.sessionStatus
@@ -52,14 +51,17 @@ class AuthRepository(private val sb: SupabaseClient) {
     suspend fun signInCustomer(email: String, password: String) {
         signIn(email, password)
         val token = sb.auth.currentAccessTokenOrNull()
-        if (token?.let { Jwt.claim(it, "app_role") } != "customer") {
-            val isCustomerAccount = sb.auth.currentSessionOrNull()?.user?.userMetadata
-                ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
+        val role = token?.let { Jwt.claim(it, "app_role") }
+        val isCustomerAccount = sb.auth.currentSessionOrNull()?.user?.userMetadata
+            ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
+        if (role != "customer" && !(role == null && isCustomerAccount)) {
             sb.auth.clearSession()
-            if (isCustomerAccount) throw CustomerRoleNotConfiguredException()
             throw CustomerAccountRequiredException()
         }
     }
+
+    fun customerRoleConfigured(): Boolean =
+        sb.auth.currentAccessTokenOrNull()?.let { Jwt.claim(it, "app_role") } == "customer"
 
     /** Returns true when a session started; false when the project requires email confirmation first. */
     suspend fun signUp(email: String, password: String, accountType: String? = null): Boolean {

@@ -24,3 +24,7 @@ verify_jwt = false
 verify_jwt = false
 [functions.online-menu]
 verify_jwt = false
+
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"

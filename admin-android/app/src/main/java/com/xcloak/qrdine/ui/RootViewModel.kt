@@ -37,9 +37,10 @@ class RootViewModel : ViewModel() {
                     ?.get("account_type")?.jsonPrimitive?.contentOrNull == "customer"
                 when {
                     role == "platform_admin" -> RootState.Platform
-                    role == "customer" || customerMetadata -> RootState.Customer
+                    role == "customer" -> RootState.Customer
                     (role == "owner" || role == "waiter" || role == "kitchen") && rid != null -> RootState.Ready(rid, role)
                     role == "owner_blocked" -> RootState.Blocked(Jwt.claim(token, "hotel_status") ?: "pending")
+                    role == null && customerMetadata -> RootState.Customer
                     else -> RootState.NeedsRestaurant
                 }
             }

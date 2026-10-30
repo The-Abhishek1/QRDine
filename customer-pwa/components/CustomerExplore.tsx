@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { CartLine } from "@/lib/cart";
 import { lineKey, unitPrice } from "@/lib/cart";
-import { customerSupabase, hasCustomerRole } from "@/lib/customerSupabase";
+import { customerSupabase, hasCustomerRole, isCustomerAccount } from "@/lib/customerSupabase";
 import { I18nContext, makeI18n } from "@/lib/i18n";
 import type { Dish, Menu } from "@/lib/types";
 import MenuView from "@/components/MenuView";
@@ -47,6 +47,23 @@ function rupees(paise: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(paise / 100);
 }
 
+function restaurantServiceError(message: string) {
+  const code = /"error"\s*:\s*"([^"]+)"/.exec(message)?.[1];
+  if (code === "server_error") {
+    return "The restaurant service returned a backend error. Deploy the online-restaurants Edge Function and latest online-ordering database migrations.";
+  }
+  if (code === "rate_limited") return "Too many requests. Wait a minute, then try loading restaurants again.";
+  if (/404|not found/i.test(message)) {
+    return "The online-restaurants Edge Function was not found. Deploy it to this Supabase project.";
+  }
+  return "Could not load restaurants. Check the Supabase project URL, internet connection, and online-restaurants deployment.";
+}
+
+async function restaurantServiceFailure(message: string, context: unknown) {
+  const details = context instanceof Response ? `${message} ${await context.clone().text()}` : message;
+  return restaurantServiceError(details);
+}
+
 export default function CustomerExplore() {
   const [session, setSession] = useState<Session | null>(null);
   const [restaurants, setRestaurants] = useState<OnlineRestaurant[]>([]);
@@ -74,6 +91,7 @@ export default function CustomerExplore() {
   const [loading, setLoading] = useState(true);
   const [authConfigured, setAuthConfigured] = useState(false);
   const [configurationError, setConfigurationError] = useState<string | null>(null);
+  const [customerRoleReady, setCustomerRoleReady] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,21 +105,44 @@ export default function CustomerExplore() {
         if (!active) return;
         if (sessionError) setError("Could not check your sign-in. Please refresh and try again.");
         const current = data.session;
-        if (current && hasCustomerRole(current.access_token)) {
+        if (current && isCustomerAccount(current.access_token, current.user.user_metadata)) {
           setSession(current);
+          setCustomerRoleReady(hasCustomerRole(current.access_token));
+          if (!hasCustomerRole(current.access_token)) {
+            setMessage("Your customer account is signed in, but online-order permissions are not enabled yet. The backend admin must enable the customer access-token hook.");
+          }
         } else if (current) {
           void supabase.auth.signOut();
           setError("This is not a customer account. Use the restaurant app sign-in instead.");
         }
         setLoading(false);
+      }).catch(() => {
+        if (!active) return;
+        setError("Could not check your sign-in. Please refresh and try again.");
+        setLoading(false);
       });
       const { data } = supabase.auth.onAuthStateChange((_event, current) => {
-        if (!active || !current) return;
-        if (hasCustomerRole(current.access_token)) {
+        if (!active) return;
+        if (!current) {
+          setSession(null);
+          setCustomerRoleReady(false);
+          setMessage(null);
+          return;
+        }
+        if (isCustomerAccount(current.access_token, current.user.user_metadata)) {
           setSession(current);
+          const roleReady = hasCustomerRole(current.access_token);
+          setCustomerRoleReady(roleReady);
           setError(null);
+          if (!roleReady) {
+            setMessage("Your customer account is signed in, but online-order permissions are not enabled yet. The backend admin must enable the customer access-token hook.");
+          }
         } else {
           setSession(null);
+          setCustomerRoleReady(false);
+          setMessage(null);
+          setError("This is not a customer account. Use the restaurant app sign-in instead.");
+          void supabase.auth.signOut();
         }
       });
       unsubscribe = () => data.subscription.unsubscribe();
@@ -118,14 +159,16 @@ export default function CustomerExplore() {
     customerSupabase().functions.invoke("online-restaurants").then(({ data, error: invokeError }) => {
       if (!active) return;
       if (invokeError) {
-        setError("Could not load restaurants. Check your connection and try again.");
+        void restaurantServiceFailure(invokeError.message, invokeError.context)
+          .then(setError)
+          .catch(() => setError(restaurantServiceError(invokeError.message)));
         return;
       }
       const result = data as { restaurants?: OnlineRestaurant[] } | null;
       setRestaurants(Array.isArray(result?.restaurants) ? result.restaurants : []);
       setError(null);
-    }).catch(() => {
-      if (active) setError("Could not load restaurants. Check your connection and try again.");
+    }).catch((invokeError: unknown) => {
+      if (active) setError(restaurantServiceError(invokeError instanceof Error ? invokeError.message : ""));
     });
     return () => { active = false; };
   }, [session]);
@@ -134,6 +177,18 @@ export default function CustomerExplore() {
     if (!session) return;
     let active = true;
     const supabase = customerSupabase();
+    if (!customerRoleReady) {
+      setProfile(null);
+      setOrders([]);
+      setProfileDraft({
+        full_name: String(session.user.user_metadata.full_name ?? ""),
+        phone: "",
+        address: "",
+        postal_code: "",
+      });
+      setEditingProfile(true);
+      return () => { active = false; };
+    }
     Promise.all([
       supabase.rpc("get_customer_profile"),
       supabase.rpc("customer_online_orders", { p_limit: 25 }),
@@ -150,7 +205,7 @@ export default function CustomerExplore() {
       if (active) setError("Could not load your profile and orders. Please refresh and try again.");
     });
     return () => { active = false; };
-  }, [session]);
+  }, [session, customerRoleReady]);
 
   useEffect(() => {
     if (!session || !selectedRestaurant) return;
@@ -205,16 +260,23 @@ export default function CustomerExplore() {
           options: { data: { account_type: "customer", full_name: name.trim() } },
         });
         if (authError) throw authError;
-        if (data.session && hasCustomerRole(data.session.access_token)) setSession(data.session);
+        if (data.session && isCustomerAccount(data.session.access_token, data.session.user.user_metadata)) {
+          setSession(data.session);
+          setCustomerRoleReady(hasCustomerRole(data.session.access_token));
+        }
         else setMessage("Check your email to confirm your customer account, then sign in.");
       } else {
         const { data, error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (authError) throw authError;
-        if (!hasCustomerRole(data.session.access_token)) {
+        if (!isCustomerAccount(data.session.access_token, data.session.user.user_metadata)) {
           await supabase.auth.signOut();
           throw new Error("This is not a customer account. Use the restaurant sign-in instead.");
         }
         setSession(data.session);
+        setCustomerRoleReady(hasCustomerRole(data.session.access_token));
+        if (!hasCustomerRole(data.session.access_token)) {
+          setMessage("Customer account recognized. The backend must enable the customer access-token hook before you can save a profile or place orders.");
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "We couldn't complete sign-in. Check your details and try again.");
@@ -273,6 +335,10 @@ export default function CustomerExplore() {
 
   async function saveCustomerProfile(event: FormEvent) {
     event.preventDefault();
+    if (!customerRoleReady) {
+      setError("Customer profile permissions are not enabled. The Supabase admin must enable the customer access-token hook, then you must sign in again.");
+      return;
+    }
     setOrderBusy(true);
     setError(null);
     try {
@@ -295,6 +361,10 @@ export default function CustomerExplore() {
 
   async function placeOnlineOrder() {
     if (!selectedRestaurant || !profileComplete || cart.length === 0) return;
+    if (!customerRoleReady) {
+      setError("Customer ordering permissions are not enabled. The Supabase admin must enable the customer access-token hook, then you must sign in again.");
+      return;
+    }
     setOrderBusy(true);
     setError(null);
     setMessage(null);
@@ -361,6 +431,10 @@ export default function CustomerExplore() {
   async function submitPaymentReference(event: FormEvent) {
     event.preventDefault();
     if (!activeOrder) return;
+    if (!customerRoleReady) {
+      setError("Customer ordering permissions are not enabled. The Supabase admin must enable the customer access-token hook, then you must sign in again.");
+      return;
+    }
     setOrderBusy(true);
     setError(null);
     try {
@@ -422,6 +496,13 @@ export default function CustomerExplore() {
         </form>
       ) : (
         <section className="marketplace-list">
+          {!customerRoleReady && (
+            <div className="marketplace-message" role="status">
+              Your customer account is signed in, but customer-order permissions are not enabled yet. The Supabase
+              project must have the customer access-token hook enabled. Ask the backend administrator to apply the
+              customer-account migration and enable that hook, then sign out and back in.
+            </div>
+          )}
           {selectedRestaurant ? (
             <div className="online-menu-page">
               <button className="link" onClick={() => { setSelectedRestaurant(null); setMenu(null); setCart([]); setError(null); }}>← All restaurants</button>

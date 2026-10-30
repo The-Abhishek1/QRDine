@@ -2,6 +2,7 @@ package com.xcloak.qrdine.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,21 +12,30 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -35,12 +45,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.OnlineRestaurant
@@ -75,18 +89,24 @@ fun CustomerAppScreen() {
     var clientOrderKeys by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var orderBusy by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
+    var directoryError by remember { mutableStateOf<String?>(null) }
+    var profileError by remember { mutableStateOf<String?>(null) }
+    var profileEditorOpen by remember { mutableStateOf(false) }
+    var serviceFilter by rememberSaveable { mutableStateOf("all") }
     var error by remember { mutableStateOf<String?>(null) }
+    val customerRoleReady = remember { QrDineApp.container.auth.customerRoleConfigured() }
 
     fun loadRestaurants() {
         scope.launch {
             loading = true
-            error = null
+            directoryError = null
             try {
                 restaurants = QrDineApp.container.customer.restaurants()
             } catch (e: Exception) {
                 Diagnostics.record(QrDineApp.appContext, e, "customer-directory")
-                error = "Restaurants could not be loaded. Check your connection and try again."
+                directoryError = restaurantDirectoryError(e)
             } finally {
                 loading = false
             }
@@ -121,11 +141,15 @@ fun CustomerAppScreen() {
     LaunchedEffect(Unit) {
         loadRestaurants()
         try {
-            customerProfile = QrDineApp.container.customer.profile()
-            customerOrders = QrDineApp.container.customer.orders()
+            if (customerRoleReady) {
+                customerProfile = QrDineApp.container.customer.profile()
+                customerOrders = QrDineApp.container.customer.orders()
+            } else {
+                profileError = "Customer ordering permissions are not enabled for this account yet. The Supabase admin must enable the custom access-token hook, then sign out and sign in again."
+            }
         } catch (e: Exception) {
             Diagnostics.record(QrDineApp.appContext, e, "customer-profile")
-            error = "Your customer profile could not be loaded. Please try again."
+            profileError = "Your customer profile and order history could not be loaded. Check that the online-ordering migrations are deployed."
         }
     }
 
@@ -192,22 +216,50 @@ fun CustomerAppScreen() {
             }
         }
     }
-    val filtered = restaurants.filter {
-        query.isBlank() || it.name.contains(query.trim(), ignoreCase = true) ||
-            it.address.orEmpty().contains(query.trim(), ignoreCase = true)
+    val filtered = restaurants.filter { restaurant ->
+        val matchesSearch = query.isBlank() || restaurant.name.contains(query.trim(), ignoreCase = true) ||
+            restaurant.address.orEmpty().contains(query.trim(), ignoreCase = true)
+        val matchesService = when (serviceFilter) {
+            "delivery" -> restaurant.deliveryEnabled
+            "pickup" -> restaurant.pickupEnabled
+            else -> true
+        }
+        matchesSearch && matchesService
     }
 
     Scaffold(
+        bottomBar = {
+            if (selectedRestaurant == null) {
+                NavigationBar {
+                    listOf(
+                        Triple("Home", Icons.Default.Home, 0),
+                        Triple("Search", Icons.Default.Search, 1),
+                        Triple("Orders", Icons.Default.ReceiptLong, 2),
+                        Triple("Profile", Icons.Default.Person, 3),
+                    ).forEach { (label, icon, index) ->
+                        NavigationBarItem(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            icon = { androidx.compose.material3.Icon(icon, contentDescription = label) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+        },
         topBar = {
             TopAppBar(
-                title = { Text("Order food", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        selectedRestaurant?.name ?: listOf("Discover", "Find restaurants", "Your orders", "Your profile")[selectedTab],
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
                 navigationIcon = {
                     if (selectedRestaurant != null) {
                         IconButton(onClick = {
                             checkoutOpen = false
                             activeOrder = null
-                            customerOrders = emptyList()
-                            customerProfile = null
                             menuRequestId++
                             selectedRestaurant = null
                             menu = null
@@ -231,20 +283,41 @@ fun CustomerAppScreen() {
             )
         },
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Column(Modifier.fillMaxSize().padding(padding)) {
             if (selectedRestaurant != null) {
                 val restaurant = selectedRestaurant!!
-                Text(restaurant.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(
-                    buildList {
-                        if (restaurant.deliveryEnabled) add("Delivery ${restaurant.deliveryFee.rupees()}")
-                        if (restaurant.pickupEnabled) add("Pickup")
-                    }.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
+                if (!customerRoleReady) {
+                    Card(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                    ) {
+                        Text(
+                            "Browsing is available, but checkout needs the Supabase customer access-token hook enabled. After it is enabled, sign out and back in.",
+                            Modifier.padding(12.dp),
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 )
+                {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            buildList {
+                                if (restaurant.deliveryEnabled) add("Delivery ${restaurant.deliveryFee.rupees()}")
+                                if (restaurant.pickupEnabled) add("Pickup")
+                            }.joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (restaurant.address != null) Text(restaurant.address, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("${cart.sumOf { it.qty }} in cart", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                }
                 when {
                     menuLoading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
                     error != null -> {
@@ -372,7 +445,7 @@ fun CustomerAppScreen() {
                             Button(
                                 onClick = { checkoutOpen = true },
                                 modifier = Modifier.fillMaxWidth(),
-                                enabled = !orderBusy,
+                                enabled = !orderBusy && customerRoleReady,
                             ) { Text("Continue to checkout") }
                         }
                         activeOrder?.let { order ->
@@ -463,63 +536,262 @@ fun CustomerAppScreen() {
                         }
                     }
                 }
-            } else {
-                Text("Restaurants accepting online orders", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text("Search restaurants or area") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (loading) {
-                    CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
-                } else if (error != null) {
-                    Text(error!!, color = MaterialTheme.colorScheme.error)
-                    Button(onClick = ::loadRestaurants) { Text("Try again") }
-                } else if (filtered.isEmpty()) {
-                    Text(
-                        if (restaurants.isEmpty()) "No restaurants are accepting online orders yet."
-                        else "No restaurants match your search.",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    if (restaurants.isEmpty()) {
-                        Text(
-                            "Restaurant owners must enable online ordering before appearing here.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                } else {
+            } else when (selectedTab) {
+                0, 1 -> {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(filtered, key = { it.id }) { restaurant ->
-                            Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
-                                Column(
-                                    Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                        if (selectedTab == 0) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(26.dp),
+                                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    ),
                                 ) {
-                                    Text(restaurant.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                    restaurant.address?.takeIf(String::isNotBlank)?.let {
-                                        Text(it, style = MaterialTheme.typography.bodyMedium)
+                                    Column(
+                                        Modifier.fillMaxWidth().padding(20.dp),
+                                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                                    ) {
+                                        Text("GOOD FOOD, CLOSE BY", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                        Text("What are you craving?", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            "Discover nearby restaurants, explore their menus, and order for delivery or pickup.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            "${restaurants.size} restaurants available",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
                                     }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        if (restaurant.deliveryEnabled) Text("Delivery")
-                                        if (restaurant.pickupEnabled) Text("Pickup")
-                                        if (restaurant.upiEnabled) Text("UPI")
-                                        if (restaurant.codEnabled) Text("Cash on delivery")
-                                    }
-                                    if (restaurant.deliveryEnabled && restaurant.deliveryFee > 0) {
-                                        Text("Delivery fee ${restaurant.deliveryFee.rupees()}", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    if (restaurant.codEnabled && restaurant.codFee > 0) {
-                                        Text("COD fee ${restaurant.codFee.rupees()}", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    Spacer(Modifier.height(2.dp))
-                                    OutlinedButton(onClick = { openRestaurant(restaurant) }) { Text("View menu") }
                                 }
                             }
+                            if (!customerRoleReady) {
+                                item {
+                                    Card(
+                                        Modifier.fillMaxWidth(),
+                                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                                    ) {
+                                        Text(
+                                            "Customer browsing works, but profile and checkout need the Supabase customer access-token hook enabled.",
+                                            Modifier.padding(14.dp),
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            item {
+                                Text("Find your next favourite", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                Text("Search by restaurant name or area.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                label = { Text("Search restaurants or area") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp),
+                                leadingIcon = { androidx.compose.material3.Icon(Icons.Default.Search, contentDescription = null) },
+                            )
+                        }
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                FilterChip(
+                                    selected = serviceFilter == "all",
+                                    onClick = { serviceFilter = "all" },
+                                    label = { Text("All") },
+                                )
+                                FilterChip(
+                                    selected = serviceFilter == "delivery",
+                                    onClick = { serviceFilter = "delivery" },
+                                    label = { Text("Delivery") },
+                                )
+                                FilterChip(
+                                    selected = serviceFilter == "pickup",
+                                    onClick = { serviceFilter = "pickup" },
+                                    label = { Text("Pickup") },
+                                )
+                            }
+                        }
+                        item {
+                            Text(
+                                if (query.isBlank()) "Restaurants accepting online orders" else "Search results",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        if (loading) {
+                            item { CircularProgressIndicator(Modifier.padding(vertical = 18.dp)) }
+                        } else if (directoryError != null) {
+                            item {
+                                Card(
+                                    Modifier.fillMaxWidth(),
+                                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    ),
+                                ) {
+                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("Restaurants couldn’t load", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                                        Text(directoryError!!, color = MaterialTheme.colorScheme.onErrorContainer)
+                                        OutlinedButton(onClick = ::loadRestaurants) { Text("Try again") }
+                                    }
+                                }
+                            }
+                        } else if (filtered.isEmpty()) {
+                            item {
+                                GlassCard(Modifier.fillMaxWidth()) {
+                                    Text(
+                                        if (restaurants.isEmpty()) "No restaurants are accepting online orders yet."
+                                        else "No restaurants match your search or filter.",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    Text(
+                                        if (restaurants.isEmpty()) "Approved restaurants appear here when they enable online ordering."
+                                        else "Try another name, area, or service filter.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (restaurants.isEmpty()) Button(onClick = ::loadRestaurants) { Text("Refresh restaurants") }
+                                }
+                            }
+                        } else {
+                            items(filtered, key = { it.id }) { restaurant ->
+                                CustomerRestaurantCard(restaurant) { openRestaurant(restaurant) }
+                            }
+                        }
+                    }
+                }
+                2 -> {
+                    Column(
+                        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Your orders", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                Text("Track recent orders and payment status.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = {
+                                scope.launch {
+                                    if (!customerRoleReady) {
+                                        profileError = "Enable the customer access-token hook in Supabase before loading orders."
+                                    } else {
+                                        try {
+                                            customerOrders = QrDineApp.container.customer.orders()
+                                            profileError = null
+                                        } catch (e: Exception) {
+                                            Diagnostics.record(QrDineApp.appContext, e, "customer-orders-refresh")
+                                            profileError = "Order history could not be refreshed. Check the online-order migration and try again."
+                                        }
+                                    }
+                                }
+                            }) { androidx.compose.material3.Icon(Icons.Default.Refresh, contentDescription = "Refresh orders") }
+                        }
+                        profileError?.let {
+                            Card(Modifier.fillMaxWidth(), colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                                Text(it, Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onTertiaryContainer)
+                            }
+                        }
+                        if (customerOrders.isEmpty()) {
+                            GlassCard(Modifier.fillMaxWidth()) {
+                                Text("No orders yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("Your order updates will appear here after you place an order.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Button(onClick = { selectedTab = 0 }) { Text("Explore restaurants") }
+                            }
+                        } else {
+                            LazyColumn(
+                                Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                items(customerOrders, key = { it.id }) { order ->
+                                    val restaurant = restaurants.firstOrNull { it.id == order.restaurantId }
+                                    Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+                                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(restaurant?.name ?: "Restaurant order", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                                    Text("Order ${order.id.take(8)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Text(order.status.replace('_', ' ').uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                            Text("${order.fulfilment.replace('_', ' ')} · ${order.paymentMethod.uppercase()} · ${order.paymentStatus.replace('_', ' ')}")
+                                            order.items.take(3).forEach { Text("${it.qty} × ${it.name}", style = MaterialTheme.typography.bodySmall) }
+                                            Text("Total ${order.total.rupees()}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                            if (order.rejectReason != null) Text(order.rejectReason, color = MaterialTheme.colorScheme.error)
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                if (restaurant != null) OutlinedButton(onClick = {
+                                                    activeOrder = order
+                                                    openRestaurant(restaurant)
+                                                    activeOrder = order
+                                                }) { Text("View order") }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    Column(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        ) {
+                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("YOUR QR DINE ACCOUNT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(customerProfile?.fullName ?: "Welcome to QR Dine", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                Text(QrDineApp.container.auth.email().orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        profileError?.let {
+                            Card(Modifier.fillMaxWidth(), colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                                Text(it, Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onTertiaryContainer)
+                            }
+                        }
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Text("Delivery profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            if (customerProfile == null) {
+                                Text("Add your name, mobile number, and address before your first order.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                Text(customerProfile!!.fullName, fontWeight = FontWeight.SemiBold)
+                                Text(customerProfile!!.phone)
+                                Text("${customerProfile!!.address}, ${customerProfile!!.postalCode}")
+                            }
+                            Button(
+                                onClick = { profileEditorOpen = true },
+                                enabled = customerRoleReady,
+                            ) { Text(if (customerProfile == null) "Complete profile" else "Edit profile") }
+                        }
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Text("Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("You are signed in with a separate customer account. Restaurant owner and staff access is kept separate.")
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    try {
+                                        QrDineApp.container.auth.signOut()
+                                    } catch (e: Exception) {
+                                        Diagnostics.record(QrDineApp.appContext, e, "customer-signout")
+                                        error = "Could not sign out. Please try again."
+                                    }
+                                }
+                            }) { Text("Sign out") }
                         }
                     }
                 }
@@ -565,6 +837,147 @@ fun CustomerAppScreen() {
             onPlaceOrder = ::submitOrder,
         )
     }
+    if (profileEditorOpen) {
+        CustomerProfileDialog(
+            profile = customerProfile,
+            busy = orderBusy,
+            onDismiss = { profileEditorOpen = false },
+            onSave = { updated ->
+                scope.launch {
+                    orderBusy = true
+                    profileError = null
+                    try {
+                        QrDineApp.container.customer.saveProfile(updated)
+                        customerProfile = updated
+                        profileEditorOpen = false
+                    } catch (e: Exception) {
+                        Diagnostics.record(QrDineApp.appContext, e, "customer-profile-save")
+                        profileError = "Could not save your profile. Check your mobile number and PIN code."
+                    } finally {
+                        orderBusy = false
+                    }
+                }
+            },
+        )
+    }
+}
+
+private fun restaurantDirectoryError(error: Exception): String {
+    val message = error.message.orEmpty()
+    val code = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"")
+        .find(message)?.groupValues?.getOrNull(1)
+    return when {
+        code == "server_error" ->
+            "The restaurant service returned a backend error. Deploy the online-restaurants Edge Function and the latest online-ordering database migrations."
+        code == "rate_limited" ->
+            "Too many restaurant requests were made. Wait a minute, then try again."
+        error::class.simpleName?.contains("NotFound", ignoreCase = true) == true ->
+            "The online-restaurants Edge Function was not found. Deploy it to this Supabase project."
+        message.contains("resolve host", ignoreCase = true) || message.contains("connect", ignoreCase = true) ->
+            "Could not connect to Supabase. Check the project URL and your internet connection."
+        else ->
+            "Restaurant request failed (${error::class.simpleName ?: "network error"}). Check the Supabase project URL and that online-restaurants is deployed."
+    }
+}
+
+@Composable
+private fun CustomerRestaurantCard(restaurant: OnlineRestaurant, onOpen: () -> Unit) {
+    Card(
+        onClick = onOpen,
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column {
+            if (!restaurant.logoUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = restaurant.logoUrl,
+                    contentDescription = "${restaurant.name} restaurant",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().height(150.dp),
+                )
+            }
+            Column(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(restaurant.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        restaurant.address?.takeIf(String::isNotBlank)?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Text("MENU  ›", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    if (restaurant.deliveryEnabled) CustomerServiceTag("Delivery · ${restaurant.deliveryFee.rupees()}")
+                    if (restaurant.pickupEnabled) CustomerServiceTag("Pickup")
+                    if (restaurant.upiEnabled) CustomerServiceTag("UPI")
+                    if (restaurant.codEnabled) CustomerServiceTag("COD")
+                }
+                if (restaurant.codEnabled && restaurant.codFee > 0) {
+                    Text("Cash on delivery fee ${restaurant.codFee.rupees()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomerServiceTag(label: String) {
+    Text(
+        label,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+        style = MaterialTheme.typography.labelSmall,
+    )
+}
+
+@Composable
+private fun CustomerProfileDialog(
+    profile: OnlineCustomerProfile?,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (OnlineCustomerProfile) -> Unit,
+) {
+    var name by remember(profile) { mutableStateOf(profile?.fullName.orEmpty()) }
+    var phone by remember(profile) { mutableStateOf(profile?.phone.orEmpty()) }
+    var address by remember(profile) { mutableStateOf(profile?.address.orEmpty()) }
+    var postalCode by remember(profile) { mutableStateOf(profile?.postalCode.orEmpty()) }
+    val valid = name.trim().length in 2..80 &&
+        Regex("^(\\+91)?[6-9][0-9]{9}$").matches(phone.trim()) &&
+        address.trim().length in 5..250 &&
+        Regex("^[0-9]{6}$").matches(postalCode.trim())
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delivery profile") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("These details are used when you place an online order.")
+                OutlinedTextField(name, { name = it.take(80) }, label = { Text("Full name") }, singleLine = true)
+                OutlinedTextField(phone, { phone = it.take(13) }, label = { Text("Indian mobile number") }, singleLine = true)
+                OutlinedTextField(address, { address = it.take(250) }, label = { Text("Address") }, minLines = 2)
+                OutlinedTextField(postalCode, { postalCode = it.filter(Char::isDigit).take(6) }, label = { Text("PIN code") }, singleLine = true)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(OnlineCustomerProfile(name.trim(), phone.trim(), address.trim(), postalCode.trim())) },
+                enabled = valid && !busy,
+            ) {
+                if (busy) CircularProgressIndicator(Modifier.height(18.dp), strokeWidth = 2.dp)
+                else Text("Save profile")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } },
+    )
 }
 
 @Composable

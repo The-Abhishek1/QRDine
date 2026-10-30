@@ -23,11 +23,21 @@ export function customerSupabase(): SupabaseClient {
 }
 
 export function hasCustomerRole(accessToken: string): boolean {
+  return readAppRole(accessToken) === "customer";
+}
+
+function readAppRole(accessToken: string): string | null {
   try {
     const encoded = accessToken.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
-    if (!encoded) return false;
-    return JSON.parse(atob(encoded)).app_role === "customer";
+    if (!encoded) return null;
+    const role = JSON.parse(atob(encoded)).app_role;
+    return typeof role === "string" ? role : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function isCustomerAccount(accessToken: string, userMetadata: Record<string, unknown> | undefined): boolean {
+  const role = readAppRole(accessToken);
+  return role === "customer" || (role === null && userMetadata?.account_type === "customer");
 }
