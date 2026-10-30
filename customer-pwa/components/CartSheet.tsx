@@ -4,7 +4,7 @@ import { rupees } from "@/lib/money";
 import { useI18n } from "@/lib/i18n";
 import type { CartLine } from "@/lib/cart";
 
-export type CartRow = { line: CartLine; dish: Dish; unit: number; label: string; problem: string | null; freeQty: number; canIncrease: boolean };
+export type CartRow = { line: CartLine; dish: Dish; unit: number; label: string; problem: string | null; freeQty: number; canIncrease: boolean; autoReward: boolean };
 
 export default function CartSheet({
   rows, suggestions, orderType, setOrderType, note, setNote, error, placing, onInc, onDec, onSuggest, onPlace, onClose,
@@ -27,22 +27,24 @@ export default function CartSheet({
         </div>
 
         <ul className="cart-lines">
-          {rows.map(({ line, label, unit, problem, freeQty, canIncrease }) => (
+          {rows.map(({ line, label, unit, problem, freeQty, canIncrease, autoReward }) => (
             <li key={line.key}>
               <div>
                 <div className="cart-name">{label}</div>
                 {freeQty > 0 && <div className="cart-note">{t("freeOfferItem", { n: freeQty })}</div>}
+                {autoReward && <div className="cart-note">{t("autoOfferReward")}</div>}
                 {line.instructions && <div className="cart-note">“{line.instructions}”</div>}
                 {problem && <div className="warn">{problem}</div>}
               </div>
-              <div className="cart-right">
+              {!autoReward && <div className="cart-right">
                 <div className="stepper" role="group" aria-label={label}>
                   <button onClick={() => onDec(line.key)} aria-label={`${t("remove")} ${label}`}>−</button>
                   <span>{line.qty}</span>
                   <button onClick={() => onInc(line.key)} disabled={!canIncrease} aria-label={`${t("add")} ${label}`}>+</button>
                 </div>
                 <div className="cart-price">{rupees(unit * (line.qty - freeQty))}</div>
-              </div>
+              </div>}
+              {autoReward && <div className="cart-price">{rupees(unit * (line.qty - freeQty))}</div>}
             </li>
           ))}
         </ul>

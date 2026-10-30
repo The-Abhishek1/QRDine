@@ -24,6 +24,8 @@ import com.xcloak.qrdine.data.InvoiceRow
 import com.xcloak.qrdine.data.OnlineOrderInsights
 import com.xcloak.qrdine.data.ReviewRow
 import com.xcloak.qrdine.data.Stats
+import com.xcloak.qrdine.data.DishStat
+import com.xcloak.qrdine.data.DailyPoint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,11 +34,12 @@ import java.io.File
 import java.time.LocalDate
 
 private enum class Range(val label: String) { TODAY("Today"), WEEK("7 days"), MONTH30("30 days"), THIS_MONTH("This month"), CUSTOM("Custom") }
+private enum class Channel(val label: String) { QR_TABLE("QR / table"), ONLINE("Online"), ALL("All channels") }
 
 private data class Insights(
     val stats: Stats, val invoices: List<InvoiceRow>, val reviews: List<ReviewRow>, val days: List<LocalDate>,
     val restaurantName: String, val start: LocalDate, val end: LocalDate,
-    val onlineOrders: OnlineOrderInsights?, val onlineError: String?,
+    val onlineOrders: OnlineOrderInsights?, val onlineError: String?, val reviewsError: String?,
 )
 
 private fun startOf(r: Range, today: LocalDate, custom: LocalDate): LocalDate = when (r) {
@@ -69,6 +72,7 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
     val owner = QrDineApp.container.owner
     val scope = rememberCoroutineScope()
     var range by rememberSaveable { mutableStateOf(Range.WEEK) }
+    var channel by rememberSaveable { mutableStateOf(Channel.QR_TABLE) }
     var data by remember { mutableStateOf<Insights?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -89,7 +93,13 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
             val to = end.plusDays(1).atStartOfDay(IST).toInstant().toString()
             val stats = owner.stats(from, to)
             val invoices = owner.invoices(from, to)
-            val reviews = runCatching { owner.reviews() }.getOrDefault(emptyList())
+            val (reviews, reviewsError) = try {
+                owner.reviews(from, to) to null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList<ReviewRow>() to (e.message ?: "QR/table reviews are unavailable").take(160)
+            }
             val (onlineOrders, onlineError) = try {
                 owner.onlineOrderInsights(from, to) to null
             } catch (e: CancellationException) {
@@ -99,7 +109,7 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
             }
             val days = generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
             val name = runCatching { owner.restaurant(restaurantId).name }.getOrDefault("")
-            data = Insights(stats, invoices, reviews, days, name, start, end, onlineOrders, onlineError)
+            data = Insights(stats, invoices, reviews, days, name, start, end, onlineOrders, onlineError, reviewsError)
             error = null
         } catch (e: CancellationException) {
             throw e
@@ -119,63 +129,106 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
                     )
                 }
             }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Channel.entries.forEach { source ->
+                    FilterChip(channel == source, { channel = source }, label = { Text(source.label) })
+                }
+            }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             val d = data
             if (d != null) {
                 val st = d.stats
+                val tableIncluded = channel != Channel.ONLINE
+                val onlineIncluded = channel != Channel.QR_TABLE
+                val online = d.onlineOrders ?: OnlineOrderInsights()
+                val revenue = (if (tableIncluded) st.revenue else 0L) + (if (onlineIncluded) online.sales else 0L)
+                val itemCount = (if (tableIncluded) st.items else 0L) + (if (onlineIncluded) online.items else 0L)
+                val orderCount = (if (tableIncluded) st.hours.sumOf { it.orders } else 0) + (if (onlineIncluded) online.orders else 0)
+                val billCount = if (tableIncluded) st.bills else 0
+                val transactionCount = when (channel) {
+                    Channel.QR_TABLE -> billCount
+                    Channel.ONLINE -> orderCount
+                    Channel.ALL -> billCount + online.orders
+                }
+                val averageLabel = when (channel) {
+                    Channel.QR_TABLE -> "Average bill"
+                    Channel.ONLINE -> "Average order"
+                    Channel.ALL -> "Average transaction"
+                }
+                val averageValue = if (transactionCount > 0) (revenue / transactionCount).rupees() else "–"
+                val dishes = (if (tableIncluded) st.dishes else emptyList()) + (if (onlineIncluded) online.dishes else emptyList())
+                val combinedDishes = dishes.groupBy { it.name }.map { (name, rows) ->
+                    DishStat(name, rows.sumOf { it.qty }, rows.sumOf { it.revenue })
+                }.sortedByDescending { it.qty }
+                val dailyPoints = (if (tableIncluded) st.daily else emptyList()) + (if (onlineIncluded) online.daily else emptyList())
+                val dailyByDay = dailyPoints.groupBy { it.day }.mapValues { (_, rows) ->
+                    DailyPoint(rows.first().day, rows.sumOf { it.revenue }, rows.sumOf { it.bills })
+                }
                 GlassCard(Modifier.fillMaxWidth()) {
                     Text("SALES REPORT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     Text("${d.start.dayOfMonth} ${d.start.month.name.lowercase().replaceFirstChar(Char::uppercase)} – ${d.end.dayOfMonth} ${d.end.month.name.lowercase().replaceFirstChar(Char::uppercase)}")
-                    Button({
-                        scope.launch {
-                            val file = withContext(Dispatchers.Default) { SalesReportPdf.build(context, d.restaurantName, d.start, d.end, st, d.invoices.size) }
-                            QrSheet.share(context, file, "Share the sales summary")
-                        }
-                    }, Modifier.fillMaxWidth().height(50.dp)) { Text("Download sales summary · PDF") }
+                    if (channel == Channel.QR_TABLE) {
+                        Button({
+                            scope.launch {
+                                val file = withContext(Dispatchers.Default) { SalesReportPdf.build(context, d.restaurantName, d.start, d.end, st, d.invoices.size) }
+                                QrSheet.share(context, file, "Share the sales summary")
+                            }
+                        }, Modifier.fillMaxWidth().height(50.dp)) { Text("Download sales summary · PDF") }
+                    }
                 }
-                if (st.bills == 0) Text("No paid bills in this period yet. Charts appear after the first bill is marked paid.", style = MaterialTheme.typography.bodyMedium)
+                if (channel == Channel.QR_TABLE && st.bills == 0) Text("No paid bills in this period yet. Charts appear after the first bill is marked paid.", style = MaterialTheme.typography.bodyMedium)
+                if (onlineIncluded && d.onlineOrders == null) {
+                    Text(
+                        if (channel == Channel.ONLINE) "Online insights could not be loaded. Apply the latest online-ordering migration, then refresh Insights."
+                        else "Online insights could not be loaded; all-channel totals currently include QR/table data only.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                    )
+                    d.onlineError?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Kpi("Revenue", st.revenue.rupees(), Modifier.weight(1f))
-                    Kpi("Bills", st.bills.toString(), Modifier.weight(1f))
+                    Kpi("Revenue", revenue.rupees(), Modifier.weight(1f))
+                    Kpi(if (channel == Channel.QR_TABLE) "Bills" else "Orders", (if (channel == Channel.QR_TABLE) billCount else orderCount).toString(), Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Kpi("Average bill", if (st.bills > 0) (st.revenue / st.bills).rupees() else "–", Modifier.weight(1f))
-                    Kpi("Dishes sold", st.items.toString(), Modifier.weight(1f))
+                    Kpi(averageLabel, averageValue, Modifier.weight(1f))
+                    Kpi("Dishes sold", itemCount.toString(), Modifier.weight(1f))
                 }
-                if (st.bills > 0) Text("Revenue includes ${st.tax.rupees()} GST (${(st.revenue - st.tax).rupees()} without it). Discounts given: ${st.discounts.rupees()}.", style = MaterialTheme.typography.bodySmall)
+                if (channel == Channel.QR_TABLE && st.bills > 0) Text("Revenue includes ${st.tax.rupees()} GST (${(st.revenue - st.tax).rupees()} without it). Discounts given: ${st.discounts.rupees()}. ${orderCount} completed orders.", style = MaterialTheme.typography.bodySmall)
+                if (channel == Channel.ALL) Text("$orderCount completed orders across channels · $billCount QR/table bills.", style = MaterialTheme.typography.bodySmall)
 
-                Section("Online sales (completed orders)") {
+                if (onlineIncluded) Section("Online ratings & feedback") {
                     if (d.onlineOrders == null) {
-                        Text("Online-order sales could not be loaded. Apply the latest online-ordering migration, then refresh Insights.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        d.onlineError?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Text("Online ratings and feedback are unavailable.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     } else {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Online revenue", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(d.onlineOrders.sales.rupees(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            }
-                            Column(Modifier.weight(1f)) {
-                                Text("Completed orders", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(d.onlineOrders.orders.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        val onlineRating = d.onlineOrders.averageRating
+                        Text(
+                            if (d.onlineOrders.ratingsCount == 0) "No online ratings yet."
+                            else "Average ${"%.1f".format(java.util.Locale.US, onlineRating)} ★ · ${d.onlineOrders.ratingsCount} ratings from ${d.onlineOrders.orders} completed orders",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (d.onlineOrders.feedback.isEmpty()) Text("No written online feedback in this period.", style = MaterialTheme.typography.bodySmall)
+                        d.onlineOrders.feedback.take(12).forEach { feedback ->
+                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Text("${stars(feedback.rating)}  ·  ${istTime(feedback.createdAt, "dd MMM, hh:mm a")}", fontWeight = FontWeight.Medium)
+                                feedback.feedback?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                                HorizontalDivider(Modifier.padding(top = 6.dp))
                             }
                         }
-                        Text("${d.onlineOrders.items} dishes in completed online orders. Online revenue is shown separately from table bills.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
-                if (d.days.size > 1) {
+                if (dailyByDay.size > 1) {
                     Section("Revenue per day") {
-                        val byDay = st.daily.associate { it.day to it.revenue }
-                        val values = d.days.map { byDay[it.toString()] ?: 0L }
+                        val values = d.days.map { dailyByDay[it.toString()]?.revenue ?: 0L }
                         val step = (d.days.size + 7) / 8
                         VBars(values, d.days.mapIndexed { i, day -> if (i % step == 0) day.dayOfMonth.toString() else "" }, MaterialTheme.colorScheme.primary)
                         Text("Best day: ${values.maxOrNull()?.rupees() ?: "–"}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
-                if (st.cash + st.upi > 0) Section("Cash vs UPI") {
+                if (channel == Channel.QR_TABLE && st.cash + st.upi > 0) Section("Cash vs UPI") {
                     val total = (st.cash + st.upi).toFloat()
                     Row(Modifier.fillMaxWidth().height(22.dp).clip(RoundedCornerShape(6.dp))) {
                         if (st.cash > 0) Box(Modifier.weight(st.cash / total).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
@@ -184,29 +237,30 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
                     Text("Cash ${st.cash.rupees()}   ·   UPI ${st.upi.rupees()}", style = MaterialTheme.typography.bodyMedium)
                 }
 
-                if (st.dishes.isNotEmpty()) {
+                if (combinedDishes.isNotEmpty()) {
                     Section("Top dishes") {
-                        val max = st.dishes.maxOf { it.qty }.toFloat()
-                        st.dishes.take(5).forEach { HBar("${it.name}", it.qty / max, "${it.qty}", MaterialTheme.colorScheme.primary) }
+                        val max = combinedDishes.maxOf { it.qty }.toFloat()
+                        combinedDishes.take(5).forEach { HBar(it.name, it.qty / max, "${it.qty}", MaterialTheme.colorScheme.primary) }
                     }
-                    if (st.dishes.size > 5) Section("Slowest sellers") {
-                        val max = st.dishes.maxOf { it.qty }.toFloat()
-                        st.dishes.sortedBy { it.qty }.take(5).forEach { HBar(it.name, it.qty / max, "${it.qty}", MaterialTheme.colorScheme.error) }
+                    if (combinedDishes.size > 5) Section("Slowest sellers") {
+                        val max = combinedDishes.maxOf { it.qty }.toFloat()
+                        combinedDishes.sortedBy { it.qty }.take(5).forEach { HBar(it.name, it.qty / max, "${it.qty}", MaterialTheme.colorScheme.error) }
                         Text("Consider a special on these, or remove them from the menu.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
-                if (st.hours.isNotEmpty()) Section("Busy hours (orders)") {
+                if (channel == Channel.QR_TABLE && st.hours.isNotEmpty()) Section("Busy hours (orders)") {
                     val byHour = st.hours.associate { it.hour to it.orders.toLong() }
                     VBars((0..23).map { byHour[it] ?: 0L }, (0..23).map { if (it % 3 == 0) it.toString() else "" }, MaterialTheme.colorScheme.tertiary)
                     val peak = st.hours.maxByOrNull { it.orders }
                     if (peak != null) Text("Busiest: ${peak.hour}:00 to ${peak.hour + 1}:00 (${peak.orders} orders)", style = MaterialTheme.typography.bodySmall)
                 }
 
-                Section("Reviews") {
+                if (tableIncluded) Section("QR/table reviews") {
                     val food = d.reviews.mapNotNull { it.ratingFood }
                     val service = d.reviews.mapNotNull { it.ratingService }
-                    if (d.reviews.isEmpty()) Text("No reviews yet. Guests can rate their visit after you mark the bill paid.")
+                    if (d.reviewsError != null) Text("QR/table reviews could not be loaded: ${d.reviewsError}", color = MaterialTheme.colorScheme.error)
+                    else if (d.reviews.isEmpty()) Text("No reviews yet in this period. Guests can rate their visit after you mark the bill paid.")
                     else {
                         Text("Food ${if (food.isEmpty()) "–" else "%.1f".format(java.util.Locale.US, food.average())}  ·  Service ${if (service.isEmpty()) "–" else "%.1f".format(java.util.Locale.US, service.average())}  ·  ${d.reviews.size} reviews", fontWeight = FontWeight.SemiBold)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -233,7 +287,7 @@ fun InsightsScreen(restaurantId: String, bottomBar: @Composable () -> Unit, onHi
                     }
                 }
 
-                Section("Bills in this period (${d.invoices.size})") {
+                if (tableIncluded) Section("Bills in this period (${d.invoices.size})") {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onHistory, Modifier.weight(1f)) { Text("All bills and reprint") }
                         OutlinedButton(onCashCount, Modifier.weight(1f)) { Text("Count the cash") }

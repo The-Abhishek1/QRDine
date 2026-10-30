@@ -102,6 +102,7 @@ class OrdersStore(
         val channel = sb.channel("owner-$id")
         val changes = merge(
             channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "orders" },
+            channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "online_orders" },
             channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "service_requests" },
             channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "sessions" },
         )

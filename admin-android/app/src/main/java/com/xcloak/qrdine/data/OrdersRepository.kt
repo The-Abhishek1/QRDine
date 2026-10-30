@@ -1,6 +1,7 @@
 package com.xcloak.qrdine.data
 
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.json.buildJsonObject
@@ -17,11 +18,12 @@ data class OwnerSnapshot(
     val pending: List<OrderCard> = emptyList(),
     val accepted: List<OrderCard> = emptyList(),
     val requests: List<RequestCard> = emptyList(),
+    val pendingOnlineOrders: Int = 0,
     val serving: List<ServingRow> = emptyList(),
     val error: String? = null,
 ) {
     /** Things that need the owner right now. The alert service keeps ringing while this is above zero. */
-    val attention: Int get() = pending.size + requests.size
+    val attention: Int get() = pending.size + requests.size + pendingOnlineOrders
 }
 
 class OrdersRepository(private val sb: SupabaseClient) {
@@ -37,6 +39,8 @@ class OrdersRepository(private val sb: SupabaseClient) {
         val tables = sb.from("dining_tables").select().decodeList<DiningTable>()
         val rest = sb.from("restaurants").select().decodeSingle<Restaurant>()
         val serving = sb.postgrest.rpc("owner_serving").decodeAs<List<ServingRow>>()
+        val role = sb.auth.currentAccessTokenOrNull()?.let { Jwt.claim(it, "app_role") }
+        val pendingOnlineOrders = if (role == "owner" || role == "waiter") OnlineOrderRepository(sb).pendingCount() else 0
 
         val label = sessions.associate { s -> s.id to (tables.firstOrNull { it.id == s.tableId }?.label ?: "?") }
         fun card(o: OrderRow) = OrderCard(o, items.filter { it.orderId == o.id }, label[o.sessionId] ?: "?")
@@ -47,6 +51,7 @@ class OrdersRepository(private val sb: SupabaseClient) {
             pending = sorted.filter { it.status == "pending" }.map(::card),
             accepted = sorted.filter { it.status == "accepted" }.map(::card),
             requests = reqs.sortedBy { it.createdAt }.map { RequestCard(it, label[it.sessionId] ?: "?") },
+            pendingOnlineOrders = pendingOnlineOrders,
             serving = serving,
         )
     }

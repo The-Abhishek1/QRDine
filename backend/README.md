@@ -65,7 +65,7 @@ Never put QR_SIGNING_SECRET or the service-role key in an app or in the PWA.
 
 ## M3: order alerts (migration 006 + notify function)
 `complete_order` (mark served). The `notify` function sends a high-priority FCM data message to every device
-registered for the restaurant whenever an order or a waiter/bill request is created.
+registered for the restaurant whenever a table order, online order, or waiter/bill request is created.
 
 ### Push setup (optional until you want alerts when the app is killed; realtime + the alert service work without it)
 1. Firebase console: create a project, add an Android app with package `com.xcloak.qrdine`, download
@@ -75,9 +75,9 @@ registered for the restaurant whenever an order or a waiter/bill request is crea
        supabase secrets set FCM_SERVICE_ACCOUNT_JSON="$(cat path/to/service-account.json)"
    (Make sure the "Firebase Cloud Messaging API (V1)" is enabled for the project.)
 3. `supabase functions deploy notify`
-4. Dashboard > Database > Webhooks > Create two webhooks, both type "Supabase Edge Functions" -> `notify`,
+4. Dashboard > Database > Webhooks > Create three webhooks, all type "Supabase Edge Functions" -> `notify`,
    event Insert, and an HTTP header `x-webhook-secret` = the WEBHOOK_SECRET value:
-   one on table `orders`, one on table `service_requests`.
+   one each on tables `orders`, `service_requests`, and `online_orders`.
 Dead tokens are removed automatically. The service-account key and the webhook secret never go in an app.
 
 ## M4: billing, insights, settings (migration 007 + review-submit)
@@ -132,7 +132,7 @@ Apply, then redeploy **all** functions (shared code changed) and add the new one
     npx supabase functions deploy session-join session-state order-place service-request qr-sheet review-submit platform-admin notify session-coupon staff-admin
 
 New functions: `session-coupon` (guest coupons), `staff-admin` (owner creates waiter/kitchen logins).
-Low-review alerts: add a third Database Webhook on table `reviews` (Insert) pointing at `notify`, with the same `x-webhook-secret` header.
+Low-review alerts: add a fourth Database Webhook on table `reviews` (Insert) pointing at `notify`, with the same `x-webhook-secret` header.
 
 What the migrations add: variants and add-ons priced in SQL; stock counts that sell out and give stock back; timed menus; translations;
 staff roles (owner / waiter / kitchen, enforced by RLS and role checks in every function); cancel an item with a reason; "ready" status;

@@ -30,6 +30,9 @@ fun HotelDetailScreen(h: HotelRow, ui: PlatformUi, vm: PlatformViewModel, snackb
     var dialog by remember { mutableStateOf<String?>(null) }
     var removePayment by remember { mutableStateOf<PaymentRow?>(null) }
     val payments = ui.payments.filter { it.restaurantId == h.id }
+    val onlineApplication = ui.onlineApplications.firstOrNull { it.id == h.id }
+    val onlinePayments = ui.onlineOrderPayments.filter { it.restaurantId == h.id }
+    val onlinePaidThrough = onlineApplication?.paidThrough?.take(10)?.let(java.time.LocalDate::parse)
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -83,6 +86,49 @@ fun HotelDetailScreen(h: HotelRow, ui: PlatformUi, vm: PlatformViewModel, snackb
                 }
             }
 
+            if (onlineApplication != null) {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("ONLINE-ORDER SERVICE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Info("Application", onlineApplication.status.replaceFirstChar(Char::uppercase))
+                    Info("Platform fee", if (ui.onlineOrderMonthlyFee > 0) "${ui.onlineOrderMonthlyFee.rupees()} / month" else "No monthly fee configured")
+                    Info("Service", if (onlineApplication.ordersEnabled) "Listing enabled" else "Listing disabled")
+                    Info("Paid through", dateLabel(onlineApplication.paidThrough))
+                    Info("Payment gate", when {
+                        onlineApplication.status != "approved" -> "Not approved"
+                        onlineApplication.adminHold -> "On hold"
+                        ui.onlineOrderMonthlyFee > 0 && onlinePaidThrough?.isBefore(java.time.LocalDate.now(IST)) != false -> "Payment due"
+                        else -> "Active"
+                    })
+                    onlineApplication.adminHoldReason?.takeIf(String::isNotBlank)?.let { Info("Hold reason", it) }
+                    if (ui.onlineBillingUnavailable) {
+                        Text("Online billing is unavailable. Apply the latest billing migration and refresh.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (onlineApplication.status == "approved") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                            if (ui.onlineOrderMonthlyFee > 0) {
+                                Button({ dialog = "online-payment" }, enabled = !ui.busy && !ui.onlineBillingUnavailable) { Text("Record online payment") }
+                            }
+                            if (onlineApplication.adminHold) {
+                                OutlinedButton({ vm.setOnlineOrderHold(onlineApplication, false) }, enabled = !ui.busy) { Text("Release online hold") }
+                            } else {
+                                OutlinedButton({ dialog = "online-hold" }, enabled = !ui.busy) { Text("Hold online orders") }
+                            }
+                        }
+                    }
+                }
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("ONLINE-ORDER PAYMENTS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    if (onlinePayments.isEmpty()) Text("No online-order payments recorded.", style = MaterialTheme.typography.bodySmall)
+                    onlinePayments.forEach { payment ->
+                        HorizontalDivider()
+                        Text("${payment.amount.rupees()} · ${payment.method.uppercase()} · ${dateLabel(payment.paidOn)}", fontWeight = FontWeight.SemiBold)
+                        Text("${payment.months} month${if (payment.months == 1) "" else "s"} · ${dateLabel(payment.periodStart)} to ${dateLabel(payment.periodEnd)}", style = MaterialTheme.typography.bodySmall)
+                        payment.reference?.takeIf(String::isNotBlank)?.let { Text("Reference: $it", style = MaterialTheme.typography.bodySmall) }
+                        payment.note?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
+
             Text("Payments from this hotel", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (payments.isEmpty()) Text("None recorded yet.", style = MaterialTheme.typography.bodySmall)
             payments.forEach { p -> PaymentRowView(p) { Row { ReceiptButton(p, ui.support); TextButton({ removePayment = p }) { Text("Remove") } } } }
@@ -115,6 +161,18 @@ fun HotelDetailScreen(h: HotelRow, ui: PlatformUi, vm: PlatformViewModel, snackb
         "extend" -> ExtendDialog({ dialog = null }) { d -> vm.extend(h, d) }
         "dates" -> DatesDialog(h, { dialog = null }) { t, s -> vm.setDates(h, t, s) }
         "payment" -> PaymentDialog(ui.hotels, h, { dialog = null }) { rid, amount, method, ref, months, date, note -> vm.recordPayment(rid, amount, method, ref, months, date, note) }
+        "online-payment" -> onlineApplication?.let { app ->
+            OnlineOrderPaymentDialog(app, ui.onlineOrderMonthlyFee, { dialog = null }) { months, method, reference, note ->
+                vm.recordOnlineOrderPayment(h.id, ui.onlineOrderMonthlyFee * months, months, method, reference, note)
+                dialog = null
+            }
+        }
+        "online-hold" -> onlineApplication?.let { app ->
+            ReasonDialog("Hold online orders for ${h.name}", "This stops customer online ordering but does not affect table service.", "Place on hold", false, { dialog = null }) { reason ->
+                vm.setOnlineOrderHold(app, true, reason)
+                dialog = null
+            }
+        }
         "edit" -> EditHotelDialog(h, { dialog = null }) { n, p, a, g, note -> vm.update(h, n, p, a, g, note) }
         "reset" -> ResetPasswordDialog(h, { dialog = null }) { pw -> vm.resetPassword(h, pw) }
         "delete" -> DeleteHotelDialog(h, { dialog = null }) { typed -> vm.deleteHotel(h, typed) { onBack() } }

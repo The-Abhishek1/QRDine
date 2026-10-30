@@ -279,10 +279,23 @@ data class Stats(
 )
 
 @Serializable
+data class OnlineFeedback(
+    val id: String,
+    val rating: Int,
+    val feedback: String? = null,
+    @SerialName("created_at") val createdAt: String,
+)
+
+@Serializable
 data class OnlineOrderInsights(
     val orders: Int = 0,
     val sales: Long = 0,
     val items: Long = 0,
+    val dishes: List<DishStat> = emptyList(),
+    val daily: List<DailyPoint> = emptyList(),
+    @SerialName("ratings_count") val ratingsCount: Int = 0,
+    @SerialName("average_rating") val averageRating: Double = 0.0,
+    val feedback: List<OnlineFeedback> = emptyList(),
 )
 
 @Serializable

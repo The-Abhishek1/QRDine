@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xcloak.qrdine.data.label
 import com.xcloak.qrdine.notify.AlertSound
+import com.xcloak.qrdine.notify.Prefs
 import kotlinx.coroutines.delay
 
 /**
@@ -45,7 +46,9 @@ fun KitchenScreen(exitLabel: String, onExit: () -> Unit, vm: OrdersViewModel = v
     LaunchedEffect(cooking.map { it.order.id }) {
         val ids = cooking.map { it.order.id }.toSet()
         val prev = seen
-        if (prev != null && ids.any { it !in prev }) AlertSound.play(context)
+        if (prev != null && ids.any { it !in prev }) {
+            if (Prefs.alertSoundEnabled(context)) AlertSound.play(context) else AlertSound.stop()
+        }
         seen = ids
     }
     LaunchedEffect(ui.message) { ui.message?.let { snackbar.showSnackbar(it); vm.messageShown() } }

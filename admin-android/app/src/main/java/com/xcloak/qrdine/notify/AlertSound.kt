@@ -16,8 +16,14 @@ import android.os.VibratorManager
  */
 object AlertSound {
     private var ringtone: Ringtone? = null
+    private var activeVibrator: Vibrator? = null
 
+    @Synchronized
     fun play(ctx: Context) {
+        if (!Prefs.alertSoundEnabled(ctx)) {
+            stop()
+            return
+        }
         stop()
         val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
@@ -30,12 +36,16 @@ object AlertSound {
         } else legacyStream(r)
         runCatching { r.play() }
         ringtone = r
-        runCatching { vibrator(ctx).vibrate(VibrationEffect.createWaveform(longArrayOf(0, 600, 300, 600, 300, 600), -1)) }
+        activeVibrator = vibrator(ctx)
+        runCatching { activeVibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 600, 300, 600, 300, 600), -1)) }
     }
 
+    @Synchronized
     fun stop() {
         runCatching { ringtone?.stop() }
         ringtone = null
+        runCatching { activeVibrator?.cancel() }
+        activeVibrator = null
     }
 
     @Suppress("DEPRECATION")

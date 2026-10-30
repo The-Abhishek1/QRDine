@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { CartLine } from "@/lib/cart";
 import { lineKey, unitPrice } from "@/lib/cart";
-import { freeOfferQuantities } from "@/lib/offers";
+import { autoOfferRewardLines, freeOfferQuantities } from "@/lib/offers";
 import { customerSupabase, hasCustomerRole, isCustomerAccount } from "@/lib/customerSupabase";
 import { I18nContext, makeI18n } from "@/lib/i18n";
 import type { Dish, Menu } from "@/lib/types";
@@ -347,22 +347,27 @@ export default function CustomerExplore() {
     line.key !== key ? [line] : line.qty <= 1 ? [] : [{ ...line, qty: line.qty - 1 }],
   ));
   const addExistingLine = (line: CartLine) => addLine({ ...line, qty: 1 });
-  const itemCount = cart.reduce((sum, line) => sum + line.qty, 0);
-  const subtotal = cart.reduce((sum, line) => {
+  const offerLines = useMemo(
+    () => autoOfferRewardLines(cart, menu?.dishes ?? [], menu?.offers ?? [], menu?.categories ?? [], true),
+    [cart, menu],
+  );
+  const effectiveCart = useMemo(() => [...cart, ...offerLines], [cart, offerLines]);
+  const itemCount = effectiveCart.reduce((sum, line) => sum + line.qty, 0);
+  const subtotal = effectiveCart.reduce((sum, line) => {
     const dish = menu?.dishes.find((item) => item.id === line.dishId);
     return sum + (dish ? unitPrice(dish, line.variantId, line.addonIds) * line.qty : 0);
   }, 0);
   const offerFreeQuantities = useMemo(() => {
     if (!menu) return new Map<string, number>();
     return freeOfferQuantities(
-      cart.flatMap((line) => {
+      effectiveCart.flatMap((line) => {
         const dish = menu.dishes.find((item) => item.id === line.dishId);
         return dish ? [{ line, dish, unit: unitPrice(dish, line.variantId, line.addonIds) }] : [];
       }),
       menu.offers,
     );
-  }, [cart, menu]);
-  const offerDiscount = cart.reduce((sum, line) => {
+  }, [effectiveCart, menu]);
+  const offerDiscount = effectiveCart.reduce((sum, line) => {
     const dish = menu?.dishes.find((item) => item.id === line.dishId);
     return sum + (dish ? (offerFreeQuantities.get(line.key) ?? 0) * unitPrice(dish, line.variantId, line.addonIds) : 0);
   }, 0);
@@ -467,7 +472,7 @@ export default function CustomerExplore() {
         p_fulfilment: fulfilment,
         p_payment: paymentMethod,
         p_note: "",
-        p_items: cart.map((line) => ({
+        p_items: effectiveCart.map((line) => ({
           dish_id: line.dishId, qty: line.qty, variant_id: line.variantId, addon_ids: line.addonIds, instructions: line.instructions,
         })),
       });
@@ -486,7 +491,7 @@ export default function CustomerExplore() {
         delivery_fee: fulfilment === "delivery" ? selectedRestaurant.online_delivery_fee : 0,
         cod_fee: paymentMethod === "cod" ? selectedRestaurant.online_cod_fee : 0,
         total: result.total,
-        items_snapshot: cart.map((line) => {
+        items_snapshot: effectiveCart.map((line) => {
           const dish = menu?.dishes.find((item) => item.id === line.dishId);
           return {
             name: dish?.name ?? "Item",
@@ -639,10 +644,11 @@ export default function CustomerExplore() {
                         <span> · {rupees(discountedSubtotal)}</span>
                       </div>
                       <ul>
-                        {cart.map((line) => {
+                        {effectiveCart.map((line) => {
                           const dish = menu.dishes.find((item) => item.id === line.dishId);
                           if (!dish) return null;
-                          const totalForDish = cart.filter((item) => item.dishId === line.dishId).reduce((sum, item) => sum + item.qty, 0);
+                          const isAutoReward = line.key.startsWith("offer-reward:");
+                          const totalForDish = effectiveCart.filter((item) => item.dishId === line.dishId).reduce((sum, item) => sum + item.qty, 0);
                           const stockLeft = dish.stock_left ?? 50;
                           const variantName = dish.variants.find((variant) => variant.id === line.variantId)?.name;
                           const addonNames = dish.addon_groups.flatMap((group) =>
@@ -653,14 +659,15 @@ export default function CustomerExplore() {
                           return (
                             <li key={line.key}>
                               <span>
-                                {line.qty} × {dish.name} — {rupees(unitPrice(dish, line.variantId, line.addonIds))}
+                                {line.qty} × {dish.name} — {isAutoReward && freeQty === line.qty ? "Free" : rupees(unitPrice(dish, line.variantId, line.addonIds))}
                                 {details && <small className="online-cart-details">{details}</small>}
                                 {freeQty > 0 && <small className="online-cart-offer">{freeQty} free with offer</small>}
+                                {isAutoReward && <small className="online-cart-offer">Added automatically as an offer reward</small>}
                               </span>
-                              <div className="online-cart-stepper" role="group" aria-label={`${dish.name} quantity`}>
+                              {!isAutoReward && <div className="online-cart-stepper" role="group" aria-label={`${dish.name} quantity`}>
                                 <button onClick={() => removeLine(line.key)} aria-label={`Remove one ${dish.name}`}>−</button>
                                 <button disabled={totalForDish >= stockLeft || line.qty >= 50} onClick={() => addExistingLine(line)} aria-label={`Add one ${dish.name}`}>+</button>
-                              </div>
+                              </div>}
                             </li>
                           );
                         })}

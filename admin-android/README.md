@@ -54,9 +54,11 @@ Tabs: Orders | Menu | Tables (badge on Orders = things waiting for you).
   Cooking: accepted orders (Mark served). Two devices can be logged in: the first to act wins, the other is told.
 - Live updates: realtime change events trigger a reload, with a 20 s poll as a safety net.
 - Alerts: while open, a foreground service re-rings every 30 s until nothing is waiting (a new order rings at once).
-  With `google-services.json` present, FCM pushes also wake the app when the system killed it.
+  Pending customer online orders count in the owner alert badge and repeat alerts. With `google-services.json`
+  present, FCM pushes also wake the app when the system killed it.
   The first launch asks for notification permission; the Orders menu has "Make alerts reliable" (battery and
-  autostart steps). Signing out stops the alerts and unregisters this phone from pushes.
+  autostart steps). Settings > This device can turn alert sounds off on this phone; visual alerts remain enabled.
+  Signing out stops the alerts and unregisters this phone from pushes.
 - Without `app/google-services.json` the app still builds and runs; only killed-app pushes are off.
 Play Console note: the alert service uses the `specialUse` foreground service type, which needs a short
 declaration in the app content form ("keeps a live connection to alert the owner to customer orders").

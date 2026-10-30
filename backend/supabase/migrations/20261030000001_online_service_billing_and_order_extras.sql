@@ -275,16 +275,74 @@ language plpgsql stable security definer set search_path = public as $$
 begin
   if not public.has_role(public.jwt_restaurant_id(), array['owner', 'waiter']) then raise exception 'not_owner'; end if;
   if p_from is null or p_to is null or p_to <= p_from then raise exception 'bad_dates'; end if;
-  return coalesce((
-    select jsonb_build_object(
-      'orders', count(*),
-      'sales', coalesce(sum(total), 0),
-      'items', coalesce(sum((select sum((item ->> 'qty')::int) from jsonb_array_elements(items_snapshot) as line(item))), 0)
-    )
-    from public.online_orders
-    where restaurant_id = public.jwt_restaurant_id()
-      and status = 'completed' and created_at >= p_from and created_at < p_to
-  ), jsonb_build_object('orders', 0, 'sales', 0, 'items', 0));
+  return jsonb_build_object(
+    'orders', (
+      select count(*) from public.online_orders
+      where restaurant_id = public.jwt_restaurant_id()
+        and status = 'completed' and created_at >= p_from and created_at < p_to
+    ),
+    'sales', coalesce((
+      select sum(total) from public.online_orders
+      where restaurant_id = public.jwt_restaurant_id()
+        and status = 'completed' and created_at >= p_from and created_at < p_to
+    ), 0),
+    'items', coalesce((
+      select sum((line.item ->> 'qty')::bigint)
+      from public.online_orders o
+      cross join lateral jsonb_array_elements(o.items_snapshot) as line(item)
+      where o.restaurant_id = public.jwt_restaurant_id()
+        and o.status = 'completed' and o.created_at >= p_from and o.created_at < p_to
+    ), 0),
+    'dishes', coalesce((
+      select jsonb_agg(jsonb_build_object('name', sold.name, 'qty', sold.qty, 'revenue', sold.revenue)
+                       order by sold.qty desc, sold.name)
+      from (
+        select line.item ->> 'name' as name,
+          sum((line.item ->> 'qty')::bigint) as qty,
+          sum((line.item ->> 'qty')::bigint * (line.item ->> 'unit_price')::bigint) as revenue
+        from public.online_orders o
+        cross join lateral jsonb_array_elements(o.items_snapshot) as line(item)
+        where o.restaurant_id = public.jwt_restaurant_id()
+          and o.status = 'completed' and o.created_at >= p_from and o.created_at < p_to
+        group by line.item ->> 'name'
+      ) sold
+    ), '[]'::jsonb),
+    'daily', coalesce((
+      select jsonb_agg(jsonb_build_object('day', daily.day, 'revenue', daily.revenue, 'bills', daily.orders)
+                       order by daily.day)
+      from (
+        select (created_at at time zone 'Asia/Kolkata')::date as day, sum(total) as revenue, count(*) as orders
+        from public.online_orders
+        where restaurant_id = public.jwt_restaurant_id()
+          and status = 'completed' and created_at >= p_from and created_at < p_to
+        group by 1
+      ) daily
+    ), '[]'::jsonb),
+    'ratings_count', (
+      select count(*) from public.online_orders
+      where restaurant_id = public.jwt_restaurant_id() and customer_rating is not null
+        and coalesce(customer_feedback_at, created_at) >= p_from
+        and coalesce(customer_feedback_at, created_at) < p_to
+    ),
+    'average_rating', coalesce((
+      select round(avg(customer_rating)::numeric, 1)
+      from public.online_orders
+      where restaurant_id = public.jwt_restaurant_id() and customer_rating is not null
+        and coalesce(customer_feedback_at, created_at) >= p_from
+        and coalesce(customer_feedback_at, created_at) < p_to
+    ), 0),
+    'feedback', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', id, 'rating', customer_rating, 'feedback', customer_feedback,
+        'created_at', coalesce(customer_feedback_at, created_at)
+      ) order by coalesce(customer_feedback_at, created_at) desc)
+      from public.online_orders
+      where restaurant_id = public.jwt_restaurant_id() and customer_rating is not null
+        and customer_feedback is not null
+        and coalesce(customer_feedback_at, created_at) >= p_from
+        and coalesce(customer_feedback_at, created_at) < p_to
+    ), '[]'::jsonb)
+  );
 end $$;
 
 revoke all on function public.online_order_service_monthly_fee(),

@@ -254,6 +254,7 @@ fun DevicePage(onKitchenMode: (Boolean) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var kitchen by remember { mutableStateOf(Prefs.kitchenMode(context)) }
+    var alertSound by remember { mutableStateOf(Prefs.alertSoundEnabled(context)) }
     var diagnosticsEnabled by remember { mutableStateOf(Diagnostics.isEnabled(context)) }
     var pendingReports by remember { mutableIntStateOf(Diagnostics.pendingCount(context)) }
     var confirmClear by remember { mutableStateOf(false) }
@@ -272,6 +273,26 @@ fun DevicePage(onKitchenMode: (Boolean) -> Unit) {
                 Switch(kitchen, { kitchen = it; Prefs.setKitchenMode(context, it); onKitchenMode(it) })
             }
             Text("Sign in with the same owner login on the second device, then switch this on there. Or create a Kitchen login under Staff logins.", style = MaterialTheme.typography.bodySmall)
+        }
+
+        GlassCard(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Order alert sounds", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (alertSound) "This device rings and vibrates for new orders and kitchen updates."
+                        else "Alerts remain visible, but this device will not play or restart alert sounds.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = alertSound,
+                    onCheckedChange = { enabled ->
+                        Prefs.setAlertSoundEnabled(context, enabled)
+                        alertSound = enabled
+                    },
+                )
+            }
         }
 
         GlassCard(Modifier.fillMaxWidth()) {

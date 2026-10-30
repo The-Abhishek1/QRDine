@@ -31,6 +31,7 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
   const [vegOnly, setVegOnly] = useState(false);
   const [q, setQ] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const groups = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -38,14 +39,18 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
       .map((c) => ({
         c,
         dishes: menu.dishes.filter((d) => {
-          if (d.category_id !== c.id || (vegOnly && !d.is_veg)) return false;
+          if (d.category_id !== c.id || (vegOnly && !d.is_veg) || (activeCategory && c.id !== activeCategory)) return false;
           if (!needle) return true;
           const hay = [d.name, d.description ?? "", ...Object.values(d.name_i18n ?? {})].join(" ").toLowerCase();
           return hay.includes(needle);
         }),
       }))
       .filter((g) => g.dishes.length > 0);
-  }, [menu, vegOnly, q]);
+  }, [menu, vegOnly, q, activeCategory]);
+
+  const categoryChoices = useMemo(() => menu.categories.filter((category) =>
+    menu.dishes.some((dish) => dish.category_id === category.id),
+  ), [menu]);
 
   async function refreshMenu() {
     if (!onRefresh || refreshing) return;
@@ -89,10 +94,19 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
           })}
         </section>
       )}
-      {groups.length > 1 && (
+      {categoryChoices.length > 1 && (
         <nav className="cats" aria-label={t("menuSections")}>
-          {groups.map(({ c }) => (
-            <a key={c.id} href={`#cat-${c.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(`cat-${c.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>{pick(c.name, c.name_i18n)}</a>
+          <button type="button" className={`category-chip ${activeCategory === null ? "on" : ""}`} aria-pressed={activeCategory === null} onClick={() => setActiveCategory(null)}>All</button>
+          {categoryChoices.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              className={`category-chip ${activeCategory === category.id ? "on" : ""}`}
+              aria-pressed={activeCategory === category.id}
+              onClick={() => setActiveCategory(activeCategory === category.id ? null : category.id)}
+            >
+              {pick(category.name, category.name_i18n)}
+            </button>
           ))}
         </nav>
       )}

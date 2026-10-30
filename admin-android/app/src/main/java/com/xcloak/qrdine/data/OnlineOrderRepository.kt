@@ -11,6 +11,11 @@ class OnlineOrderRepository(private val sb: SupabaseClient) {
         buildJsonObject { put("p_limit", 50) },
     ).decodeAs()
 
+    suspend fun pendingCount(): Int = sb.postgrest.rpc(
+        "restaurant_online_orders",
+        buildJsonObject { put("p_limit", 100) },
+    ).decodeAs<List<OnlineOrder>>().count { it.status == "pending" }
+
     suspend fun action(orderId: String, action: String, reason: String? = null, etaMinutes: Int? = null) {
         sb.postgrest.rpc("restaurant_online_order_action", buildJsonObject {
             put("p_order_id", orderId)

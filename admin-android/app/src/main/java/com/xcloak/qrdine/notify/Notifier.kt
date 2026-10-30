@@ -19,6 +19,7 @@ import com.xcloak.qrdine.R
 
 object Notifier {
     const val CH_ORDERS = "orders_v1"
+    const val CH_ORDERS_SILENT = "orders_silent_v1"
     const val CH_SERVICE = "service_v1"
     const val ID_SERVICE = 101
     const val ID_ALERT = 102
@@ -38,6 +39,14 @@ object Notifier {
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 600, 300, 600, 300, 600)
                 setSound(sound, attrs)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_ORDERS_SILENT, "New orders and waiter calls (silent)", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Shown when alert sounds are turned off"
+                enableVibration(false)
+                setSound(null, null)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
         )
@@ -66,10 +75,12 @@ object Notifier {
 
     @SuppressLint("MissingPermission")
     fun alert(ctx: Context, title: String, text: String, orderId: String? = null) {
+        createChannels(ctx)
         if (Build.VERSION.SDK_INT >= 33 &&
             ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
-        val builder = NotificationCompat.Builder(ctx, CH_ORDERS)
+        val channel = if (Prefs.alertSoundEnabled(ctx)) CH_ORDERS else CH_ORDERS_SILENT
+        val builder = NotificationCompat.Builder(ctx, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)

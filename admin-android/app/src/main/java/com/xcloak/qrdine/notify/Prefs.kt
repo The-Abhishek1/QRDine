@@ -6,6 +6,11 @@ object Prefs {
     private fun sp(c: Context) = c.getSharedPreferences("qrdine_prefs", Context.MODE_PRIVATE)
     fun openForOrders(c: Context) = sp(c).getBoolean("open_for_orders", false)
     fun setOpenForOrders(c: Context, v: Boolean) = sp(c).edit().putBoolean("open_for_orders", v).apply()
+    fun alertSoundEnabled(c: Context) = sp(c).getBoolean("alert_sound_enabled", true)
+    fun setAlertSoundEnabled(c: Context, v: Boolean) {
+        sp(c).edit().putBoolean("alert_sound_enabled", v).apply()
+        if (!v) AlertSound.stop()
+    }
 
     // this device
     fun kitchenMode(c: Context) = sp(c).getBoolean("kitchen_mode", false)

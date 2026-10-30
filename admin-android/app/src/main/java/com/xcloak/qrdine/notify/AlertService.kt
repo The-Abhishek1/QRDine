@@ -59,9 +59,9 @@ class AlertService : Service() {
             val now = SystemClock.elapsedRealtime()
             if (n > 0 && (n > last || now - lastRing >= 30_000)) {
                 val (title, text) = describe(snap)
-                val single = if (snap.pending.size == 1 && snap.requests.isEmpty()) snap.pending[0].order.id else null
+                val single = if (snap.pending.size == 1 && snap.requests.isEmpty() && snap.pendingOnlineOrders == 0) snap.pending[0].order.id else null
                 Notifier.alert(this, title, text, single)
-                AlertSound.play(this)
+                if (Prefs.alertSoundEnabled(this)) AlertSound.play(this) else AlertSound.stop()
                 lastRing = now
             }
             if (n == 0 && last > 0) { Notifier.clearAlert(this); AlertSound.stop() }
@@ -72,12 +72,13 @@ class AlertService : Service() {
 
     private fun describe(s: OwnerSnapshot): Pair<String, String> {
         val tables = (s.pending.map { it.tableLabel } + s.requests.map { it.tableLabel }).distinct().joinToString(", ")
-        val title = when {
-            s.pending.isNotEmpty() && s.requests.isNotEmpty() -> "${s.pending.size} order(s) and ${s.requests.size} request(s) waiting"
-            s.pending.isNotEmpty() -> if (s.pending.size == 1) "New order waiting" else "${s.pending.size} orders waiting"
-            else -> if (s.requests.size == 1) "A table needs you" else "${s.requests.size} tables need you"
+        val waiting = buildList {
+            if (s.pending.isNotEmpty()) add("${s.pending.size} table order(s)")
+            if (s.pendingOnlineOrders > 0) add("${s.pendingOnlineOrders} online order(s)")
+            if (s.requests.isNotEmpty()) add("${s.requests.size} table request(s)")
         }
-        return title to "Table $tables. Open the app to respond."
+        val location = if (tables.isNotEmpty()) "Tables $tables. " else ""
+        return "${waiting.joinToString(", ")} waiting" to "${location}Open the app to respond."
     }
 
     override fun onDestroy() {

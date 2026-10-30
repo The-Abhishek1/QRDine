@@ -17,7 +17,7 @@ class OrderFcmService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val d = message.data
         Notifier.alert(this, d["title"] ?: "New order", d["body"] ?: "Open the app to respond.", if (d["kind"] == "order") d["order_id"] else null)
-        AlertSound.play(this)
+        if (Prefs.alertSoundEnabled(this)) AlertSound.play(this) else AlertSound.stop()
         if (Prefs.openForOrders(this)) {
             // restarts the alert loop (and the live connection) if the system had killed it
             runCatching { ContextCompat.startForegroundService(this, Intent(this, AlertService::class.java)) }

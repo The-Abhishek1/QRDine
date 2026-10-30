@@ -4,7 +4,7 @@ import { api, ApiError } from "@/lib/api";
 import { rupees } from "@/lib/money";
 import { newKey } from "@/lib/uuid";
 import { type CartLine, isSimple, lineKey, parseCart, unitPrice } from "@/lib/cart";
-import { freeOfferQuantities } from "@/lib/offers";
+import { autoOfferRewardLines, freeOfferQuantities } from "@/lib/offers";
 import { I18nContext, LANGS, makeI18n, useI18n } from "@/lib/i18n";
 import { sessionIdFromToken, subscribeSession } from "@/lib/realtime";
 import type { ActiveState, Dish, EndedState, JoinResult, Menu } from "@/lib/types";
@@ -181,22 +181,28 @@ export default function TableApp({ token }: { token: string }) {
     return stock === null || stock === undefined ? Number.MAX_SAFE_INTEGER : Math.max(0, stock - inCart);
   }, [dishById]);
 
-  const rows: CartRow[] = useMemo(() => cart.flatMap((line) => {
+  const offerLines = useMemo(
+    () => autoOfferRewardLines(cart, menu?.dishes ?? [], menu?.offers ?? [], menu?.categories ?? []),
+    [cart, menu],
+  );
+  const effectiveCart = useMemo(() => [...cart, ...offerLines], [cart, offerLines]);
+  const rows: CartRow[] = useMemo(() => effectiveCart.flatMap((line) => {
     const d = dishById.get(line.dishId);
     if (!d) return [];
     const c = catById.get(d.category_id);
-    const dishQty = cart.filter((item) => item.dishId === d.id).reduce((n, item) => n + item.qty, 0);
+    const dishQty = effectiveCart.filter((item) => item.dishId === d.id).reduce((n, item) => n + item.qty, 0);
     const problem = !d.is_available || d.stock_left === 0 ? t("soldOut")
       : c && !c.open_now ? t("notNow")
         : d.stock_left !== null && dishQty > d.stock_left ? t("dishUnavailable", { name: pick(d.name, d.name_i18n) }) : null;
     const variant = d.variants.find((v) => v.id === line.variantId);
     const addons = d.addon_groups.flatMap((g) => g.addons).filter((a) => line.addonIds.includes(a.id));
     const label = pick(d.name, d.name_i18n) + (variant ? ` (${variant.name})` : "") + (addons.length ? ` + ${addons.map((a) => a.name).join(", ")}` : "");
+    const autoReward = line.key.startsWith("offer-reward:");
     return [{
       line, dish: d, unit: unitPrice(d, line.variantId, line.addonIds), label, problem, freeQty: 0,
-      canIncrease: line.qty < 50 && remainingForDish(d.id, cart) > 0,
+      canIncrease: !autoReward && line.qty < 50 && remainingForDish(d.id, effectiveCart) > 0, autoReward,
     }];
-  }), [cart, dishById, catById, remainingForDish, t, pick]);
+  }), [effectiveCart, dishById, catById, remainingForDish, t, pick]);
   const rowsWithOffers = useMemo(() => {
     const free = freeOfferQuantities(rows, menu?.offers ?? []);
     return rows.map((row) => ({ ...row, freeQty: free.get(row.line.key) ?? 0 }));

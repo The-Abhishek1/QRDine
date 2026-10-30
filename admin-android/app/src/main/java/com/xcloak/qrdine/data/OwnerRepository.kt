@@ -83,8 +83,10 @@ class OwnerRepository(private val sb: SupabaseClient) {
             put("p_to", toIso)
         }).decodeAs<OnlineOrderInsights>()
 
-    suspend fun reviews(): List<ReviewRow> =
-        sb.from("reviews").select().decodeList<ReviewRow>().sortedByDescending { it.createdAt }
+    suspend fun reviews(fromIso: String, toIso: String): List<ReviewRow> =
+        sb.from("reviews").select {
+            filter { gte("created_at", fromIso); lt("created_at", toIso) }
+        }.decodeList<ReviewRow>().sortedByDescending { it.createdAt }
 
     suspend fun setReviewNote(id: String, note: String) {
         sb.from("reviews").update({ set("reply", note.trim().ifBlank { null }) }) { filter { eq("id", id) } }

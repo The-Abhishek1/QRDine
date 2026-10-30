@@ -70,7 +70,9 @@ button { cursor: pointer; }
 .chip-toggle input:focus-visible + span { outline: 3px solid var(--haldi); outline-offset: 2px; }
 
 .cats { display: flex; gap: 8px; overflow-x: auto; padding: 6px 0 10px; position: sticky; top: 64px; background: var(--paper); z-index: 10; scrollbar-width: none; }
-.cats a { flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; color: var(--ink); background: var(--card); }
+.cats a, .cats .category-chip { flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; color: var(--ink); background: var(--card); }
+.cats .category-chip { font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.cats .category-chip.on { border-color: var(--peacock); background: color-mix(in srgb, var(--peacock) 12%, var(--card)); color: var(--peacock); }
 .cat { scroll-margin-top: 130px; }
 .cat h2 { margin: 18px 0 2px; font-size: 1.15rem; }
 .cat ul { list-style: none; margin: 0; padding: 0; }
@@ -561,8 +563,8 @@ button:active { transform: scale(.98); }
 .tools input[type=search]:focus, .coupon input:focus, .note textarea:focus, .pin-form input:focus { border-color: var(--peacock); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--peacock) 15%, transparent); }
 .chip-toggle span { min-height: 44px; padding: 8px 13px; border-radius: 14px; }
 .cats { top: 181px; gap: 8px; margin: 0 -20px; padding: 8px 20px 12px; background: color-mix(in srgb, var(--paper) 94%, transparent); backdrop-filter: blur(12px); }
-.cats a { padding: 8px 14px; border-color: var(--line); border-radius: 999px; font-size: .9rem; font-weight: 600; }
-.cats a:hover { border-color: var(--peacock); color: var(--peacock); }
+.cats a, .cats .category-chip { padding: 8px 14px; border-color: var(--line); border-radius: 999px; font-size: .9rem; font-weight: 600; }
+.cats a:hover, .cats .category-chip:hover { border-color: var(--peacock); color: var(--peacock); }
 .offers { margin: 10px 0 20px; padding: 16px; border: 1px solid color-mix(in srgb, var(--haldi) 45%, var(--line)); border-radius: 18px; background: linear-gradient(135deg, color-mix(in srgb, var(--haldi) 12%, var(--card)), var(--card) 65%); }
 .offers h2 { display: flex; align-items: center; gap: 7px; font-size: 1rem; }
 .offers h2::before { content: "✦"; color: #D39414; }
@@ -864,8 +866,8 @@ button, input, textarea, select { color: inherit; }
   background: rgba(9, 27, 21, .95);
   backdrop-filter: blur(14px);
 }
-.cats a { transition: border-color .18s ease, background-color .18s ease, color .18s ease; }
-.cats a:hover {
+.cats a, .cats .category-chip { transition: border-color .18s ease, background-color .18s ease, color .18s ease; }
+.cats a:hover, .cats .category-chip:hover {
   border-color: var(--peacock);
   background: rgba(86, 197, 168, .12);
 }
