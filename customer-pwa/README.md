@@ -4,9 +4,9 @@ The QR Dine PWA is a Next.js application for customer ordering and a restaurant-
 
 1. **Table QR ordering** at `/t/<signed-token>` using a restaurant-issued QR code.
 2. **Online ordering** at `/explore`, with customer authentication and delivery or pickup from approved restaurants.
-3. **Restaurant workspace** at `/restaurant`, with owner login/signup, online-order management, menu availability, and online-order setup.
+3. **Restaurant workspace** at `/restaurant`, with owner login/signup and web equivalents for the core restaurant-management workflows in the Android owner module.
 
-The restaurant workspace complements the Android app. Restaurant owner accounts can manage online orders from a desktop browser; staff workflows and the full dine-in operation remain in the Android app.
+The restaurant workspace is responsive for desktop and mobile browsers. It complements the Android app with browser-based order, menu, table, settings, and reporting workflows. Native Android capabilities such as FCM delivery, Bluetooth thermal-printer integration, and background alerts still require the Android app.
 
 ## Requirements
 
@@ -77,7 +77,16 @@ UPI payment handoff does not verify payment. The restaurant must check the trans
 
 ### Restaurant workspace
 
-Open `/restaurant` from the home page to sign in or create a restaurant owner account. New accounts submit restaurant details for platform approval; an existing owner can finish restaurant setup after confirming their email and signing in. The owner workspace shows restaurant approval and online-service status, incoming online orders, payment verification and order actions, dish online availability, and fulfilment/payment settings.
+Open `/restaurant` from the home page to sign in or create a restaurant owner account. New accounts submit restaurant details for platform approval; an existing owner can finish restaurant setup after confirming their email and signing in. The owner workspace includes:
+
+- **QR and table orders:** incoming dine-in orders, preparation and serving actions, guest waiter/bill requests, staff-entered orders, item cancellation, bill calculation, discounts/coupons, and cash/UPI/split payment settlement.
+- **Online orders:** delivery and pickup order review, payment verification, accept/reject/complete actions, online availability controls, and fulfilment/payment setup.
+- **Menu:** category and dish management, sizes/variants, optional add-on groups, Buy X Get Y offers, availability, image uploads, CSV templates/import/export, and supported-language translations.
+- **Tables:** create and remove tables, open or cancel sessions, move/merge sessions, regenerate QR codes, and print QR sheets.
+- **Insights:** QR and online sales summaries, date/channel filters, top dishes, customer feedback and replies, cash counts, invoice history, and CSV export.
+- **Settings:** restaurant profile and logo, tax and UPI settings, QR ordering mode, languages, announcements, coupons, staff accounts, manager PIN, browser order alerts, and password updates.
+
+The order-sound preference and browser notification permission are device/browser-specific. Sound alerts run only while the dashboard is open; browser printing uses the system print dialog rather than native Bluetooth printer support.
 
 The workspace uses the public Supabase anon/publishable key with authenticated owner JWTs, existing RLS policies, and backend RPCs. It does not use a service-role key. Enable the custom Auth hook before testing: restaurant owner tokens need the correct `app_role` and `restaurant_id` claims, while customer accounts are rejected from the restaurant workspace.
 

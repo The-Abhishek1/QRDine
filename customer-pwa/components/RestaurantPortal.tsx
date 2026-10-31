@@ -4,13 +4,28 @@ import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { customerSupabase, getAppRole } from "@/lib/customerSupabase";
 import { rupees } from "@/lib/money";
+import { playOwnerAlertSound } from "@/lib/ownerAlerts";
+import RestaurantSettingsPanel from "@/components/RestaurantSettingsPanel";
+import RestaurantInsights from "@/components/RestaurantInsights";
+import RestaurantMenuManager from "@/components/RestaurantMenuManager";
+import RestaurantQrOrders from "@/components/RestaurantQrOrders";
+import RestaurantTablesManager from "@/components/RestaurantTablesManager";
 
 type Restaurant = {
   id: string;
   name: string;
   phone: string | null;
   address: string | null;
+  fssai: string | null;
+  logo_url: string | null;
+  gst_mode: "none" | "regular" | "composition";
+  gst_rate: number;
+  gstin: string | null;
+  service_charge_pct: number;
   upi_id: string | null;
+  mode: "staff_activated" | "open";
+  is_open: boolean;
+  languages: string[];
   online_orders_enabled: boolean;
   online_delivery_enabled: boolean;
   online_pickup_enabled: boolean;
@@ -56,17 +71,6 @@ type OnlineOrder = {
   created_at: string;
 };
 
-type MenuDish = {
-  id: string;
-  category_id: string;
-  name: string;
-  base_price: number;
-  is_available: boolean;
-  online_available: boolean;
-  stock_qty: number | null;
-};
-
-type MenuCategory = { id: string; name: string };
 type HotelStatus = {
   state: string;
   hotel_name?: string;
@@ -75,7 +79,7 @@ type HotelStatus = {
   days_left?: number | null;
 };
 
-type PortalTab = "orders" | "menu" | "settings";
+type PortalTab = "qr-orders" | "orders" | "menu" | "tables" | "insights" | "settings";
 
 function readClaim(token: string, key: string): string | null {
   try {
@@ -143,16 +147,10 @@ export default function RestaurantPortal() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [hotelStatus, setHotelStatus] = useState<HotelStatus | null>(null);
   const [orders, setOrders] = useState<OnlineOrder[]>([]);
-  const [dishes, setDishes] = useState<MenuDish[]>([]);
-  const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [serviceActive, setServiceActive] = useState(false);
   const [serviceMonthlyFee, setServiceMonthlyFee] = useState(0);
   const [codAvailable, setCodAvailable] = useState(false);
   const [applicationNote, setApplicationNote] = useState("");
-  const [profileName, setProfileName] = useState("");
-  const [profilePhone, setProfilePhone] = useState("");
-  const [profileAddress, setProfileAddress] = useState("");
-  const [profileUpi, setProfileUpi] = useState("");
   const [deliveryEnabled, setDeliveryEnabled] = useState(false);
   const [pickupEnabled, setPickupEnabled] = useState(false);
   const [upiEnabled, setUpiEnabled] = useState(false);
@@ -161,6 +159,7 @@ export default function RestaurantPortal() {
   const [codFee, setCodFee] = useState("0");
   const [etaMinutes, setEtaMinutes] = useState<Record<string, string>>({});
   const rejectedAccountSignout = useRef(false);
+  const seenOnlineOrderIds = useRef<Set<string> | null>(null);
 
   const statusLabel = useMemo(() => {
     if (restaurant?.online_orders_admin_hold) return "Paused by platform";
@@ -191,38 +190,33 @@ export default function RestaurantPortal() {
     const restaurantId = readClaim(current.access_token, "restaurant_id");
     if (!restaurantId) throw new Error("Your restaurant could not be identified. Sign out and sign in again.");
 
-    const [restaurantResult, orderResult, dishResult, categoryResult, serviceFeeResult, codResult] = await Promise.all([
+    const [restaurantResult, orderResult, serviceFeeResult, codResult] = await Promise.all([
       supabase.from("restaurants").select(
-        "id,name,phone,address,upi_id,online_orders_enabled,online_delivery_enabled,online_pickup_enabled,online_upi_enabled,online_cod_enabled,online_delivery_fee,online_cod_fee,online_application_status,online_application_review,online_orders_admin_hold,online_orders_admin_hold_reason,online_orders_paid_through",
+        "id,name,phone,address,fssai,logo_url,gst_mode,gst_rate,gstin,service_charge_pct,upi_id,mode,is_open,languages,online_orders_enabled,online_delivery_enabled,online_pickup_enabled,online_upi_enabled,online_cod_enabled,online_delivery_fee,online_cod_fee,online_application_status,online_application_review,online_orders_admin_hold,online_orders_admin_hold_reason,online_orders_paid_through",
       ).eq("id", restaurantId).single(),
       supabase.rpc("restaurant_online_orders", { p_limit: 100 }),
-      supabase.from("dishes").select("id,category_id,name,base_price,is_available,online_available,stock_qty")
-        .eq("restaurant_id", restaurantId).is("deleted_at", null).order("name"),
-      supabase.from("categories").select("id,name").eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort"),
       supabase.rpc("online_order_service_monthly_fee"),
       supabase.rpc("online_cod_available"),
     ]);
 
-    const failure = restaurantResult.error || orderResult.error || dishResult.error ||
-      categoryResult.error || serviceFeeResult.error || codResult.error;
+    const failure = restaurantResult.error || orderResult.error || serviceFeeResult.error || codResult.error;
     if (failure) throw failure;
 
     const row = restaurantResult.data as Restaurant;
+    const onlineRows = (orderResult.data ?? []) as OnlineOrder[];
+    const pendingOnlineIds = new Set(onlineRows.filter((order) => order.status === "pending").map((order) => order.id));
+    if (seenOnlineOrderIds.current && [...pendingOnlineIds].some((id) => !seenOnlineOrderIds.current?.has(id)) &&
+      window.localStorage.getItem("qrdine:restaurant-alert-sound") === "on") playOwnerAlertSound();
+    seenOnlineOrderIds.current = pendingOnlineIds;
     setRestaurant(row);
     setHotelStatus(null);
-    setOrders((orderResult.data ?? []) as OnlineOrder[]);
-    setDishes((dishResult.data ?? []) as MenuDish[]);
-    setCategories((categoryResult.data ?? []) as MenuCategory[]);
+    setOrders(onlineRows);
     const serviceFee = Number(serviceFeeResult.data ?? 0);
     setServiceActive(!row.online_orders_admin_hold && (
       serviceFee === 0 || Boolean(row.online_orders_paid_through && new Date(row.online_orders_paid_through).getTime() >= Date.now())
     ));
     setServiceMonthlyFee(serviceFee);
     setCodAvailable(Boolean(codResult.data));
-    setProfileName(row.name);
-    setProfilePhone(row.phone ?? "");
-    setProfileAddress(row.address ?? "");
-    setProfileUpi(row.upi_id ?? "");
     setDeliveryEnabled(row.online_delivery_enabled);
     setPickupEnabled(row.online_pickup_enabled);
     setUpiEnabled(row.online_upi_enabled);
@@ -239,7 +233,6 @@ export default function RestaurantPortal() {
       setRestaurant(null);
       setHotelStatus(null);
       setOrders([]);
-      setDishes([]);
       setLoading(false);
       return;
     }
@@ -412,45 +405,6 @@ export default function RestaurantPortal() {
       await refreshDashboard();
     } catch (actionError) {
       setError(errorText(actionError));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggleDish(dish: MenuDish) {
-    setBusy(true);
-    setError(null);
-    try {
-      const { error: toggleError } = await customerSupabase().rpc("set_online_order_dish_availability", {
-        p_dish_id: dish.id,
-        p_available: !dish.online_available,
-      });
-      if (toggleError) throw toggleError;
-      setDishes((current) => current.map((item) => item.id === dish.id ? { ...item, online_available: !dish.online_available } : item));
-    } catch (toggleError) {
-      setError(errorText(toggleError));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveProfile() {
-    if (!restaurant) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const { error: saveError } = await customerSupabase().from("restaurants").update({
-        name: profileName.trim(),
-        phone: profilePhone.trim(),
-        address: profileAddress.trim(),
-        upi_id: profileUpi.trim() || null,
-      }).eq("id", restaurant.id);
-      if (saveError) throw saveError;
-      setNotice("Restaurant details saved.");
-      await refreshDashboard();
-    } catch (saveError) {
-      setError(errorText(saveError));
     } finally {
       setBusy(false);
     }
@@ -632,8 +586,6 @@ export default function RestaurantPortal() {
 
   const pendingOrders = orders.filter((order) => order.status === "pending");
   const completedOrders = orders.filter((order) => order.status === "completed");
-  const categoryName = new Map(categories.map((category) => [category.id, category.name]));
-
   return (
     <main className="restaurant-portal">
       <header className="portal-topbar">
@@ -648,9 +600,12 @@ export default function RestaurantPortal() {
         <aside className="portal-sidebar">
           <p>RESTAURANT WORKSPACE</p>
           {([
-            ["orders", "Orders", pendingOrders.length ? `${pendingOrders.length} new` : ""],
-            ["menu", "Menu availability", ""],
-            ["settings", "Online ordering", ""],
+            ["qr-orders", "QR & table orders", ""],
+            ["orders", "Online orders", pendingOrders.length ? `${pendingOrders.length} new` : ""],
+            ["menu", "Menu", ""],
+            ["tables", "Tables", ""],
+            ["insights", "Insights", ""],
+            ["settings", "Settings", ""],
           ] as [PortalTab, string, string][]).map(([key, label, badge]) => (
             <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
               <span>{label}</span>{badge && <small>{badge}</small>}
@@ -665,20 +620,34 @@ export default function RestaurantPortal() {
           <div className="portal-page-heading">
             <div>
               <span className="welcome-eyebrow">{restaurant.name.toUpperCase()}</span>
-              <h1>{tab === "orders" ? "Online orders" : tab === "menu" ? "Menu availability" : "Online ordering setup"}</h1>
-              <p>{tab === "orders" ? "Review and respond to customer delivery and pickup orders." : tab === "menu" ? "Control which dishes customers can order online." : "Manage your listing, fulfilment options, and application status."}</p>
+              <h1>{({
+                "qr-orders": "QR & table orders",
+                orders: "Online orders",
+                menu: "Menu manager",
+                tables: "Table manager",
+                insights: "Restaurant insights",
+                settings: "Restaurant settings",
+              })[tab]}</h1>
+              <p>{({
+                "qr-orders": "Manage guest requests, prepare dine-in orders, and settle table bills.",
+                orders: "Review and respond to customer delivery and pickup orders.",
+                menu: "Manage dishes, categories, variants, add-ons, offers, and availability.",
+                tables: "Create dining tables, manage sessions, and print QR codes.",
+                insights: "Review sales, customer feedback, cash counts, and invoices.",
+                settings: "Manage your restaurant profile, staff, billing, and online-order setup.",
+              })[tab]}</p>
             </div>
-            <button className="portal-secondary" onClick={() => void refreshDashboard()} disabled={busy}>↻ Refresh</button>
+            {(tab === "orders" || tab === "qr-orders") && <button className="portal-secondary" onClick={() => void refreshDashboard()} disabled={busy}>↻ Refresh</button>}
           </div>
           {error && <p className="portal-message error" role="alert">{error}</p>}
           {notice && <p className="portal-message success" role="status">{notice}</p>}
-          {restaurant.online_orders_admin_hold && (
+          {(tab === "orders" || tab === "settings") && restaurant.online_orders_admin_hold && (
             <div className="portal-status-banner state-hold">
               <strong>Online orders are on hold</strong>
               <span>{restaurant.online_orders_admin_hold_reason || "Contact platform support for details."}</span>
             </div>
           )}
-          {!serviceActive && restaurant.online_orders_enabled && !restaurant.online_orders_admin_hold && (
+          {(tab === "orders" || tab === "settings") && !serviceActive && restaurant.online_orders_enabled && !restaurant.online_orders_admin_hold && (
             <div className="portal-status-banner state-hold">
               <strong>Online-order service is inactive</strong>
               <span>{serviceMonthlyFee > 0 ? `Online-order service fee: ${rupees(serviceMonthlyFee)} per month. Contact the platform administrator to record payment.` : "Contact the platform administrator to review your online-order service access."}</span>
@@ -738,40 +707,24 @@ export default function RestaurantPortal() {
               )}
             </>
           )}
-          {tab === "menu" && (
-            <div className="portal-menu-panel">
-              <div className="portal-section-title"><div><h2>Online availability</h2><p>This only affects the online menu; it does not change your dine-in menu.</p></div></div>
-              {categories.map((category) => {
-                const categoryDishes = dishes.filter((dish) => dish.category_id === category.id);
-                if (!categoryDishes.length) return null;
-                return <section className="portal-menu-category" key={category.id}>
-                  <h3>{category.name}</h3>
-                  {categoryDishes.map((dish) => (
-                    <article className="portal-dish-row" key={dish.id}>
-                      <div><strong>{dish.name}</strong><span>{rupees(dish.base_price)}{dish.stock_qty !== null ? ` · ${dish.stock_qty} in stock` : ""}{!dish.is_available ? " · Sold out" : ""}</span></div>
-                      <label className="portal-switch">
-                        <input type="checkbox" checked={dish.online_available} disabled={busy || !dish.is_available} onChange={() => void toggleDish(dish)} />
-                        <span>{dish.online_available && dish.is_available ? "Available online" : "Hidden online"}</span>
-                      </label>
-                    </article>
-                  ))}
-                </section>;
-              })}
-              {dishes.length === 0 && <div className="portal-empty"><strong>No menu dishes found</strong><span>Add dishes in your restaurant menu before enabling online ordering.</span></div>}
-            </div>
-          )}
+          {tab === "qr-orders" && <RestaurantQrOrders restaurantId={restaurant.id} />}
+          {tab === "menu" && <RestaurantMenuManager restaurantId={restaurant.id} languages={restaurant.languages} onRefresh={refreshDashboard} />}
+          {tab === "tables" && <RestaurantTablesManager
+            restaurantId={restaurant.id}
+            restaurantName={restaurant.name}
+            onRefresh={refreshDashboard}
+            onOpenOrders={() => setTab("qr-orders")}
+          />}
+          {tab === "insights" && <RestaurantInsights restaurantId={restaurant.id} />}
           {tab === "settings" && (
-            <div className="portal-settings-layout">
-              <section className="portal-panel">
-                <div className="portal-section-title"><div><h2>Restaurant details</h2><p>Customers use these details for orders and directions.</p></div></div>
-                <form className="portal-form-grid" onSubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
-                  <Field label="Restaurant name" value={profileName} onChange={setProfileName} required />
-                  <Field label="Restaurant phone" value={profilePhone} onChange={setProfilePhone} type="tel" required />
-                  <Field label="Restaurant address" value={profileAddress} onChange={setProfileAddress} required />
-                  <Field label="UPI ID" value={profileUpi} onChange={setProfileUpi} />
-                  <button className="portal-action-primary" disabled={busy}>Save restaurant details</button>
-                </form>
-              </section>
+            <>
+              <RestaurantSettingsPanel
+                restaurant={restaurant}
+                email={session.user.email ?? ""}
+                busy={busy}
+                codAvailable={codAvailable}
+                onRefresh={refreshDashboard}
+              />
               <section className="portal-panel">
                 <div className="portal-section-title">
                   <div><h2>Online-order application</h2><p>Approval is required before customers can see your online listing.</p></div>
@@ -800,7 +753,7 @@ export default function RestaurantPortal() {
                     </fieldset>
                     <fieldset className="portal-options">
                       <legend>Payment methods</legend>
-                      <label><input type="checkbox" checked={upiEnabled} onChange={(event) => setUpiEnabled(event.target.checked)} disabled={!profileUpi.trim()} /> UPI{!profileUpi.trim() ? " (add UPI ID above)" : ""}</label>
+                      <label><input type="checkbox" checked={upiEnabled} onChange={(event) => setUpiEnabled(event.target.checked)} disabled={!restaurant.upi_id?.trim()} /> UPI{!restaurant.upi_id?.trim() ? " (add UPI ID in billing settings)" : ""}</label>
                       <label><input type="checkbox" checked={codEnabled} onChange={(event) => setCodEnabled(event.target.checked)} disabled={!codAvailable} /> Cash on delivery{!codAvailable ? " (not enabled by platform)" : ""}</label>
                     </fieldset>
                     <Field label="Delivery fee (₹)" value={deliveryFee} onChange={setDeliveryFee} type="number" />
@@ -817,7 +770,7 @@ export default function RestaurantPortal() {
                   </div>
                 )}
               </section>
-            </div>
+            </>
           )}
           <footer className="portal-footer"><span>QR Dine Restaurant Workspace</span><a href="/explore">Customer ordering</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>
         </section>
