@@ -67,7 +67,7 @@ Customer checkout requires the customer account migration, online-order settings
 
 - **Orders:** Table order requests, waiter/bill requests, online order attention, status actions, and refresh.
 - **Online orders:** Accept or reject customer delivery/pickup orders and review their payment/customer details.
-- **Menu:** Categories, dishes, photos, availability, sizes, stock, optional add-ons, and Buy N Get M offers.
+- **Menu:** Categories, dishes, photos, availability, sizes, stock, optional add-ons, and Buy N Get M offers. CSV import/export uses readable column headings, includes three complete dish examples in the downloadable template, and supports the older `category,name,price` and common `Category,Food_Item,Price_INR` formats.
 - **Tables:** Table sessions and QR code generation.
 - **Insights:** Sales, dishes, order channels, reviews/feedback, and date-range reporting.
 - **Settings:** Restaurant details, online ordering, alerts, account, and appearance.

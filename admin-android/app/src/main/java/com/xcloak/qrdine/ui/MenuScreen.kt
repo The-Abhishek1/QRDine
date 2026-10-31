@@ -334,7 +334,7 @@ fun MenuHost(
 
 @Composable
 private fun CsvImportGuide(onDismiss: () -> Unit, languages: List<String>, onDownloadTemplate: () -> Unit, onChooseFile: () -> Unit) {
-    val sample = menuCsvTemplate(languages).lineSequence().take(3).joinToString("\n")
+    val sample = menuCsvTemplate(languages).lineSequence().take(5).joinToString("\n")
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.UploadFile, null, tint = MaterialTheme.colorScheme.primary) },
@@ -344,7 +344,7 @@ private fun CsvImportGuide(onDismiss: () -> Unit, languages: List<String>, onDow
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("Download the template for the exact columns matching this restaurant's enabled languages.", style = MaterialTheme.typography.bodyMedium)
+                Text("Download the template for the exact columns matching this restaurant's enabled languages. It includes three complete example dishes; Paneer Tikka uses two rows to demonstrate separate sizes.", style = MaterialTheme.typography.bodyMedium)
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)) {
                     Text(
                         sample,
@@ -352,7 +352,14 @@ private fun CsvImportGuide(onDismiss: () -> Unit, languages: List<String>, onDow
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
                     )
                 }
-                Text("Each row has category, dish name, base selling price (₹), optional base original/list price, veg (y/n), description and language columns. For sizes, repeat the same dish fields on one row per size and fill variant_name, variant_price and optional variant_original_price. Size names such as Half and Full are labels; the database has no separate numeric quantity field. Every original price must be greater than its matching selling price.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("What each column means", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                menuCsvColumnDescriptions(languages).forEach { (header, description) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(header, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Text("For multiple sizes, repeat the same dish details on one row per size and change only the size and its prices. Size names such as Half and Full are labels; the database has no separate numeric quantity field. Every original/list price must be greater than its matching selling price. The older category,name,price headers and common Category,Food_Item,Price_INR headers are also accepted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("CSV supports quoted commas, escaped quotes (\"\"), and quoted line breaks. Import adds dishes and creates missing categories. Add-on groups/options are stored as separate linked records and are not represented or imported by this CSV; set them up in Extras after import.", style = MaterialTheme.typography.bodySmall)
             }
         },

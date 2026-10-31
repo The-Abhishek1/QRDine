@@ -75,11 +75,46 @@ private fun List<String>.textAt(headers: Map<String, Int>, name: String): String
 private fun parseCsvPrice(raw: String): Int? =
     rupeesToPaise(raw.replace("₹", "").replace(",", "").trim())?.takeIf { it <= 10_000_000L }?.toInt()
 
+private fun normalizeCsvHeader(raw: String): String {
+    val header = raw.trim().removePrefix("\uFEFF").lowercase()
+    val normalized = header.replace(Regex("[^a-z0-9]+"), " ").trim().replace(Regex("\\s+"), " ")
+    val simple = header.replace(Regex("[^a-z0-9]+"), "_").trim('_')
+    return when {
+        simple in menuCsvFieldKeys(LANG_NAMES.keys.toList()) -> simple
+        simple == "food_item" -> "name"
+        simple == "price_inr" -> "price"
+        normalized == "category name" -> "category"
+        normalized == "category type food or beverage" -> "category_kind"
+        normalized == "dish name" -> "name"
+        normalized == "selling price" || normalized == "selling price inr" -> "price"
+        normalized == "original list price" || normalized == "original list price inr" -> "original_price"
+        normalized == "vegetarian yes or no" -> "veg"
+        normalized == "dish description" -> "description"
+        normalized == "size variant name" -> "variant_name"
+        normalized == "size variant selling price" || normalized == "size variant selling price inr" -> "variant_price"
+        normalized == "size variant original list price" || normalized == "size variant original list price inr" -> "variant_original_price"
+        else -> {
+            val language = LANG_NAMES.entries.firstOrNull {
+                normalized.endsWith(" ${it.value.lowercase()}")
+            }
+            if (language == null) simple else {
+                val prefix = normalized.removeSuffix(" ${language.value.lowercase()}")
+                when (prefix) {
+                    "category name" -> "category_${language.key}"
+                    "dish name" -> "name_${language.key}"
+                    "dish description" -> "description_${language.key}"
+                    else -> simple
+                }
+            }
+        }
+    }
+}
+
 /** Reads the current language-aware CSV shape and the original five-column import format. */
 fun parseDishCsv(text: String, supportedLanguages: List<String> = LANG_NAMES.keys.toList()): List<CsvDish> {
     val records = readCsvRecords(text)
     if (records.isEmpty()) return emptyList()
-    val first = records.first().map { it.trim().removePrefix("\uFEFF").lowercase() }
+    val first = records.first().map(::normalizeCsvHeader)
     val hasHeader = "category" in first && "name" in first && "price" in first
     val headers = if (hasHeader) first.withIndex().associate { it.value to it.index } else emptyMap()
     if (hasHeader && headers.size != first.size) throw IllegalArgumentException("CSV header names must be unique.")
@@ -88,7 +123,7 @@ fun parseDishCsv(text: String, supportedLanguages: List<String> = LANG_NAMES.key
             key.removePrefix(prefix).takeIf { key.startsWith(prefix) && it.matches(Regex("[a-z]{2,3}")) }
         }
     if (hasHeader) {
-        val allowed = (menuCsvHeaders(supportedLanguages) + listOf("category", "name", "price", "veg", "description")).toSet()
+        val allowed = menuCsvFieldKeys(supportedLanguages).toSet()
         val unsupportedColumns = headers.keys.filterNot { it in allowed || localizedCode(it) != null }
         if (unsupportedColumns.isNotEmpty()) throw IllegalArgumentException(
             "CSV columns are not supported: ${unsupportedColumns.joinToString()}. Add-on groups and other menu settings must be managed separately.",
@@ -109,7 +144,12 @@ fun parseDishCsv(text: String, supportedLanguages: List<String> = LANG_NAMES.key
         fun value(key: String, legacyIndex: Int? = null) =
             if (hasHeader) values.textAt(headers, key) else legacyIndex?.let { values.getOrNull(it).orEmpty().trim() }.orEmpty()
         val category = value("category", 0)
+        val categoryLabel = category.lowercase().replace(Regex("[^a-z]"), "")
         val categoryKind = value("category_kind").takeIf { it.isNotBlank() }?.lowercase()
+            ?: when {
+                "juice" in categoryLabel || "beverage" in categoryLabel || "drink" in categoryLabel -> "beverage"
+                else -> null
+            }
         if (categoryKind != null && categoryKind !in setOf("food", "beverage")) {
             throw IllegalArgumentException("CSV row ${idx + if (hasHeader) 2 else 1} has an invalid category_kind; use food or beverage.")
         }
@@ -127,7 +167,8 @@ fun parseDishCsv(text: String, supportedLanguages: List<String> = LANG_NAMES.key
         }
         val vegRaw = value("veg", 3).lowercase()
         val veg = when (vegRaw) {
-            "", "y", "yes", "veg", "true", "1" -> true
+            "" -> !categoryLabel.contains("nonveg") && !categoryLabel.contains("nonvegetarian")
+            "y", "yes", "veg", "true", "1" -> true
             "n", "no", "non-veg", "nonveg", "non veg", "false", "0" -> false
             else -> throw IllegalArgumentException("CSV row ${idx + if (hasHeader) 2 else 1} has an invalid veg value; use y or n.")
         }
@@ -159,12 +200,54 @@ fun parseDishCsv(text: String, supportedLanguages: List<String> = LANG_NAMES.key
     }
 }
 
-fun menuCsvHeaders(languages: List<String>): List<String> =
+private fun menuCsvFieldKeys(languages: List<String>): List<String> =
     listOf("category", "category_kind") + languages.map { "category_$it" } +
         listOf("name") + languages.map { "name_$it" } +
         listOf("price", "original_price", "veg", "description") +
         languages.map { "description_$it" } +
         listOf("variant_name", "variant_price", "variant_original_price")
+
+private fun menuCsvHeaderLabel(key: String): String = when {
+    key == "category" -> "Category name"
+    key == "category_kind" -> "Category type (food or beverage)"
+    key.startsWith("category_") -> "Category name (${LANG_NAMES[key.removePrefix("category_")] ?: key.removePrefix("category_")})"
+    key == "name" -> "Dish name"
+    key.startsWith("name_") -> "Dish name (${LANG_NAMES[key.removePrefix("name_")] ?: key.removePrefix("name_")})"
+    key == "price" -> "Selling price (INR)"
+    key == "original_price" -> "Original/list price (INR)"
+    key == "veg" -> "Vegetarian? (yes or no)"
+    key == "description" -> "Dish description"
+    key.startsWith("description_") -> "Dish description (${LANG_NAMES[key.removePrefix("description_")] ?: key.removePrefix("description_")})"
+    key == "variant_name" -> "Size/variant name"
+    key == "variant_price" -> "Size/variant selling price (INR)"
+    key == "variant_original_price" -> "Size/variant original/list price (INR)"
+    else -> key
+}
+
+fun menuCsvHeaders(languages: List<String>): List<String> =
+    menuCsvFieldKeys(languages).map(::menuCsvHeaderLabel)
+
+fun menuCsvColumnDescriptions(languages: List<String>): List<Pair<String, String>> =
+    menuCsvFieldKeys(languages).map { key ->
+        menuCsvHeaderLabel(key) to when (key) {
+            "category" -> "Required. Category that groups this dish, for example Mains or Beverages."
+            "category_kind" -> "Required. Enter food or beverage."
+            "name" -> "Required. The dish name shown to customers."
+            "price" -> "Required. Base selling price in Indian rupees; enter a positive amount, for example 250 or 250.50."
+            "original_price" -> "Optional. Previous/list price in rupees; leave blank if there is no discount. If entered, it must be higher than the selling price."
+            "veg" -> "Required. Enter yes for vegetarian or no for non-vegetarian."
+            "description" -> "Optional. Short dish description shown to customers."
+            "variant_name" -> "Optional. Size or variant label, for example Half, Full, or 300 ml."
+            "variant_price" -> "Required when a size/variant name is entered. Selling price for that size in rupees."
+            "variant_original_price" -> "Optional. Previous/list price for that size; if entered, it must be higher than its variant selling price."
+            else -> when {
+                key.startsWith("category_") -> "Optional translated category name in ${LANG_NAMES[key.removePrefix("category_")] ?: key.removePrefix("category_")}."
+                key.startsWith("name_") -> "Optional translated dish name in ${LANG_NAMES[key.removePrefix("name_")] ?: key.removePrefix("name_")}."
+                key.startsWith("description_") -> "Optional translated dish description in ${LANG_NAMES[key.removePrefix("description_")] ?: key.removePrefix("description_")}."
+                else -> ""
+            }
+        }
+    }
 
 private fun csvCell(value: String): String =
     if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' } || value != value.trim())
@@ -174,25 +257,44 @@ private fun paiseAsRupees(paise: Int?): String =
     paise?.let { "%d.%02d".format(java.util.Locale.ROOT, it / 100, it % 100).trimEnd('0').trimEnd('.') }.orEmpty()
 
 fun menuCsvTemplate(languages: List<String>): String {
+    val keys = menuCsvFieldKeys(languages)
     val headers = menuCsvHeaders(languages)
-    fun row(variant: String, amount: String, original: String): String {
-        val data = headers.associateWith { "" }.toMutableMap()
-        data["category"] = "Mains"
-        data["category_kind"] = "food"
-        data["name"] = "Paneer Tikka"
-        data["price"] = "250"
-        data["original_price"] = "300"
-        data["veg"] = "y"
-        data["description"] = "Smoky, grilled paneer"
+    fun row(
+        category: String,
+        categoryKind: String,
+        name: String,
+        price: String,
+        original: String,
+        veg: String,
+        description: String,
+        variant: String,
+        variantPrice: String,
+        variantOriginal: String,
+    ): String {
+        val data = keys.associateWith { "" }.toMutableMap()
+        data["category"] = category
+        data["category_kind"] = categoryKind
+        data["name"] = name
+        data["price"] = price
+        data["original_price"] = original
+        data["veg"] = veg
+        data["description"] = description
         data["variant_name"] = variant
-        data["variant_price"] = amount
-        data["variant_original_price"] = original
-        return headers.joinToString(",") { csvCell(data[it].orEmpty()) }
+        data["variant_price"] = variantPrice
+        data["variant_original_price"] = variantOriginal
+        return keys.joinToString(",") { csvCell(data[it].orEmpty()) }
     }
-    return (listOf(headers.joinToString(",") { csvCell(it) }, row("Half", "140", "180"), row("Full", "250", "300"))).joinToString("\r\n", postfix = "\r\n")
+    val examples = listOf(
+        row("Mains", "food", "Paneer Tikka", "250", "300", "yes", "Smoky grilled paneer with mint chutney", "Half", "140", "180"),
+        row("Mains", "food", "Paneer Tikka", "250", "300", "yes", "Smoky grilled paneer with mint chutney", "Full", "250", "300"),
+        row("Rice and Biryani", "food", "Chicken Biryani", "350", "400", "no", "Fragrant basmati rice with spiced chicken", "Full", "350", "400"),
+        row("Beverages", "beverage", "Orange Juice", "140", "160", "yes", "Freshly squeezed orange juice", "300 ml", "140", "160"),
+    )
+    return (listOf(headers.joinToString(",") { csvCell(it) }) + examples).joinToString("\r\n", postfix = "\r\n")
 }
 
 fun exportMenuCsv(state: MenuUiState): String {
+    val keys = menuCsvFieldKeys(state.languages)
     val headers = menuCsvHeaders(state.languages)
     val categories = state.categories.associateBy { it.id }
     val variants = state.variants.groupBy { it.dishId }
@@ -202,7 +304,7 @@ fun exportMenuCsv(state: MenuUiState): String {
         val cat = categories[dish.categoryId]
         val sizes: List<DishVariant?> = variants[dish.id].orEmpty().map { it }.ifEmpty { listOf(null) }
         sizes.map { variant ->
-            val data = headers.associateWith { "" }.toMutableMap()
+            val data = keys.associateWith { "" }.toMutableMap()
             data["category"] = cat?.name.orEmpty()
             data["category_kind"] = cat?.kind.orEmpty()
             cat?.nameI18n.orEmpty().forEach { (lang, value) -> data["category_$lang"] = value }
@@ -216,7 +318,7 @@ fun exportMenuCsv(state: MenuUiState): String {
             data["variant_name"] = variant?.name.orEmpty()
             data["variant_price"] = paiseAsRupees(variant?.price)
             data["variant_original_price"] = paiseAsRupees(variant?.originalPrice)
-            headers.joinToString(",") { csvCell(data[it].orEmpty()) }
+            keys.joinToString(",") { csvCell(data[it].orEmpty()) }
         }
     }
     return (listOf(headers.joinToString(",") { csvCell(it) }) + lines).joinToString("\r\n", postfix = "\r\n")
