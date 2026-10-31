@@ -129,7 +129,7 @@ Never put these secrets or a Supabase service-role key in the Android app, PWA, 
 3. Configure `FCM_SERVICE_ACCOUNT_JSON` and `WEBHOOK_SECRET` as Supabase function secrets.
 4. Deploy `notify` and configure database webhooks for the relevant order/request tables with the `x-webhook-secret` header.
 
-The Android app builds without Firebase configuration; push delivery when the app is killed is optional.
+The Android app builds without Firebase configuration; push delivery when the app is killed is optional. The customer PWA can also register browser FCM tokens in the existing `devices` table. To enable it, register a Firebase Web app in the same project, enable Firebase Cloud Messaging, create a Web Push certificate key, and configure the PWA `NEXT_PUBLIC_FIREBASE_*` settings described in [customer-pwa/README.md](../customer-pwa/README.md). Add the deployed HTTPS origin to Firebase's authorized domains. Owners then enable background alerts for each browser in restaurant settings. Web configuration and the VAPID public key are public client values; keep the Firebase service-account JSON server-side.
 
 ## Optional diagnostics
 

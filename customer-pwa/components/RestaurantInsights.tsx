@@ -47,6 +47,10 @@ function toIstIso(date: string, end = false): string {
 
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : "The request failed. Please try again."; }
 
+function arrayOrEmpty<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
@@ -83,6 +87,7 @@ export default function RestaurantInsights({ restaurantId }: { restaurantId: str
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNotice(null);
     try {
       if (dates.end < dates.start) throw new Error("End date must be on or after the start date.");
       const pFrom = toIstIso(dates.start);
@@ -99,8 +104,25 @@ export default function RestaurantInsights({ restaurantId }: { restaurantId: str
       ]);
       const failure = qrResult.error || onlineResult.error || reviewsResult.error || invoicesResult.error || cashResult.error;
       if (failure) throw failure;
-      setStats(qrResult.data as SalesStats);
-      setOnline(onlineResult.data as OnlineStats);
+      const qrData = qrResult.data as SalesStats;
+      const onlineData = onlineResult.data as OnlineStats;
+      const hasChartData = [qrData?.daily, onlineData?.daily, qrData?.dishes, onlineData?.dishes, qrData?.hours]
+        .every(Array.isArray);
+      setStats({
+        ...EMPTY_STATS,
+        ...qrData,
+        daily: arrayOrEmpty<DailyPoint>(qrData?.daily),
+        dishes: arrayOrEmpty<DishStat>(qrData?.dishes),
+        hours: arrayOrEmpty(qrData?.hours),
+      });
+      setOnline({
+        ...EMPTY_ONLINE,
+        ...onlineData,
+        daily: arrayOrEmpty<DailyPoint>(onlineData?.daily),
+        dishes: arrayOrEmpty<DishStat>(onlineData?.dishes),
+        feedback: arrayOrEmpty<Feedback>(onlineData?.feedback),
+      });
+      if (!hasChartData) setNotice("The report returned incomplete chart data. Refresh or contact support if this continues.");
       setReviews((reviewsResult.data ?? []) as Review[]);
       setInvoices((invoicesResult.data ?? []) as Invoice[]);
       setCashCounts((cashResult.data ?? []) as CashCount[]);
@@ -134,7 +156,7 @@ export default function RestaurantInsights({ restaurantId }: { restaurantId: str
     try {
       const { error: saveError } = await customerSupabase().from("reviews").update({ reply: reply[review.id]?.trim() || null }).eq("id", review.id);
       if (saveError) throw saveError;
-      setNotice("Review reply saved.");
+      setNotice("Review note saved.");
       await load();
     } catch (saveError) {
       setError(messageOf(saveError));
@@ -186,6 +208,41 @@ export default function RestaurantInsights({ restaurantId }: { restaurantId: str
     URL.revokeObjectURL(url);
   }
 
+  function printSalesSummary() {
+    if (!stats || !online) return;
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setError("Your browser blocked the sales report window. Allow pop-ups and try again.");
+      return;
+    }
+    const daily = Object.values([...(qrIncluded ? stats.daily : []), ...(onlineIncluded ? online.daily : [])]
+      .reduce<Record<string, DailyPoint>>((result, point) => {
+        result[point.day] ??= { day: point.day, revenue: 0, bills: 0 };
+        result[point.day].revenue += point.revenue;
+        result[point.day].bills += point.bills;
+        return result;
+      }, {})).sort((a, b) => a.day.localeCompare(b.day));
+    const dailyRows = daily.map((point) => `<tr><td>${escapeHtml(point.day)}</td><td>${point.bills}</td><td>${escapeHtml(rupees(point.revenue))}</td></tr>`).join("");
+    const dishRows = topDishes.map((dish) => `<tr><td>${escapeHtml(dish.name)}</td><td>${dish.qty}</td><td>${escapeHtml(rupees(dish.revenue))}</td></tr>`).join("");
+    popup.onload = () => { popup.focus(); popup.print(); };
+    popup.document.write(`<!doctype html><html><head><title>QR Dine sales report ${dates.start} – ${dates.end}</title><style>
+      body{font:13px Arial,sans-serif;color:#111;max-width:900px;margin:32px auto;padding:0 20px}
+      h1{margin-bottom:4px}p{color:#555;margin-top:0}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:22px 0}
+      .metric{border:1px solid #ccc;padding:12px}.metric strong{display:block;font-size:19px;margin-top:5px}
+      table{width:100%;border-collapse:collapse;margin:12px 0 24px}th,td{text-align:left;padding:8px;border-bottom:1px solid #ddd}
+      th:last-child,td:last-child{text-align:right}th:nth-child(2),td:nth-child(2){text-align:right}
+      @media print{body{margin:0 auto;padding:0}.metrics{break-inside:avoid}}
+      </style></head><body><h1>Restaurant sales summary</h1><p>${escapeHtml(dates.start)} – ${escapeHtml(dates.end)} · ${channel === "all" ? "All channels" : channel === "qr" ? "QR/table" : "Online"} · Currency: INR</p>
+      <div class="metrics"><div class="metric">Sales<strong>${escapeHtml(rupees(revenue))}</strong></div><div class="metric">Transactions<strong>${orders}</strong></div>
+      <div class="metric">Average transaction<strong>${escapeHtml(orders ? rupees(Math.round(revenue / orders)) : "—")}</strong></div>
+      <div class="metric">Items sold<strong>${items}</strong></div></div>
+      ${dailyRows ? `<h2>Daily sales</h2><table><thead><tr><th>Date</th><th>Transactions</th><th>Sales</th></tr></thead><tbody>${dailyRows}</tbody></table>` : ""}
+      ${dishRows ? `<h2>Top dishes</h2><table><thead><tr><th>Dish</th><th>Quantity</th><th>Revenue</th></tr></thead><tbody>${dishRows}</tbody></table>` : ""}
+      ${qrIncluded ? `<p>Table discounts: ${escapeHtml(rupees(stats.discounts))} · GST collected: ${escapeHtml(rupees(stats.tax))} · Cash: ${escapeHtml(rupees(stats.cash))} · UPI: ${escapeHtml(rupees(stats.upi))}</p>` : ""}
+      </body></html>`);
+    popup.document.close();
+  }
+
   function printInvoice(invoice: Invoice) {
     const popup = window.open("", "_blank");
     if (!popup) {
@@ -195,6 +252,7 @@ export default function RestaurantInsights({ restaurantId }: { restaurantId: str
     const snapshot = invoice.snapshot as InvoiceSnapshot;
     const restaurant = snapshot.restaurant ?? {};
     const bill = snapshot.bill ?? {};
+    const paperWidth = window.localStorage.getItem("qrdine:printer-width") === "80" ? "80mm" : "58mm";
     const rows = (bill.lines ?? []).map((line) => `<tr><td>${escapeHtml(line.name)}</td><td>${line.qty}</td><td>${escapeHtml(rupees(line.price))}</td><td>${escapeHtml(rupees(line.amount))}</td></tr>`).join("");
     const amount = (value: number | undefined) => escapeHtml(rupees(value ?? 0));
     const details = [
@@ -203,7 +261,8 @@ export default function RestaurantInsights({ restaurantId }: { restaurantId: str
     ].filter((value): value is string => Boolean(value)).map((value) => `<div>${escapeHtml(value)}</div>`).join("");
     popup.onload = () => { popup.focus(); popup.print(); };
     popup.document.write(`<!doctype html><html><head><title>Invoice ${escapeHtml(invoice.fy)}/${invoice.number}</title><style>
-      body{font:14px Arial,sans-serif;color:#111;max-width:760px;margin:32px auto;padding:0 20px}
+      @page{size:${paperWidth} auto;margin:3mm}
+      body{font:14px Arial,sans-serif;color:#111;width:100%;margin:0}
       header{text-align:center;border-bottom:1px solid #aaa;padding-bottom:14px}h1{font-size:23px;margin:0 0 7px}
       .meta{display:flex;justify-content:space-between;margin:18px 0}table{width:100%;border-collapse:collapse}
       th,td{text-align:left;padding:8px 5px;border-bottom:1px solid #ddd}th:last-child,td:last-child{text-align:right}
@@ -251,7 +310,7 @@ export default function RestaurantInsights({ restaurantId }: { restaurantId: str
         <article><span>Dishes sold</span><strong>{items}</strong><small>Across selected channels</small></article>
       </div>
       <section className="portal-panel">
-        <div className="portal-section-title"><div><h2>Sales trends</h2><p>Gross sales for each day, in rupees.</p></div><button className="portal-secondary" onClick={exportSalesCsv}>Export CSV</button></div>
+        <div className="portal-section-title"><div><h2>Sales trends</h2><p>Gross sales for each day, in rupees.</p></div><div className="portal-menu-tools"><button className="portal-secondary" onClick={printSalesSummary}>Print / save PDF</button><button className="portal-secondary" onClick={exportSalesCsv}>Export CSV</button></div></div>
         {(qrIncluded ? stats.daily : []).concat(onlineIncluded ? online.daily : []).length ? <div className="portal-chart">
           {Object.values([...(qrIncluded ? stats.daily : []), ...(onlineIncluded ? online.daily : [])]
             .reduce<Record<string, DailyPoint>>((result, point) => {
@@ -286,8 +345,8 @@ export default function RestaurantInsights({ restaurantId }: { restaurantId: str
         {reviews.length ? reviews.map((review) => <article className="portal-feedback-card" key={review.id}>
           <strong>Food {review.rating_food ?? "—"} ★ · Service {review.rating_service ?? "—"} ★</strong>
           <small>{new Date(review.created_at).toLocaleString()}</small><p>{review.comment || "No written feedback."}</p>
-          <label className="portal-field"><span>Your reply</span><textarea rows={2} maxLength={500} value={reply[review.id] ?? review.reply ?? ""} onChange={(event) => setReply((current) => ({ ...current, [review.id]: event.target.value }))} /></label>
-          <button className="portal-secondary" onClick={() => void saveReviewReply(review)} disabled={busy}>Save reply</button>
+          <label className="portal-field"><span>Your note</span><textarea rows={2} maxLength={500} value={reply[review.id] ?? review.reply ?? ""} onChange={(event) => setReply((current) => ({ ...current, [review.id]: event.target.value }))} /></label>
+          <button className="portal-secondary" onClick={() => void saveReviewReply(review)} disabled={busy}>Save note</button>
         </article>) : <p className="portal-form-hint">No QR/table feedback in this period.</p>}
       </section>}
       {qrIncluded && <section className="portal-panel">

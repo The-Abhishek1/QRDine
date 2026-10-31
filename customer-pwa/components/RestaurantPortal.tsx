@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { customerSupabase, getAppRole } from "@/lib/customerSupabase";
 import { rupees } from "@/lib/money";
 import { playOwnerAlertSound } from "@/lib/ownerAlerts";
+import { listenForWebPush } from "@/lib/webPush";
 import RestaurantSettingsPanel from "@/components/RestaurantSettingsPanel";
 import RestaurantInsights from "@/components/RestaurantInsights";
 import RestaurantMenuManager from "@/components/RestaurantMenuManager";
@@ -79,7 +80,8 @@ type HotelStatus = {
   days_left?: number | null;
 };
 
-type PortalTab = "qr-orders" | "orders" | "menu" | "tables" | "insights" | "settings";
+type PortalTab = "qr-orders" | "orders" | "menu" | "tables" | "insights" | "settings" | "kitchen";
+type RestaurantRole = "owner" | "waiter" | "kitchen";
 
 function readClaim(token: string, key: string): string | null {
   try {
@@ -143,7 +145,8 @@ export default function RestaurantPortal() {
   const [restaurantName, setRestaurantName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [tab, setTab] = useState<PortalTab>("orders");
+  const [tab, setTab] = useState<PortalTab>("qr-orders");
+  const [portalRole, setPortalRole] = useState<RestaurantRole>("owner");
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [hotelStatus, setHotelStatus] = useState<HotelStatus | null>(null);
   const [orders, setOrders] = useState<OnlineOrder[]>([]);
@@ -180,7 +183,7 @@ export default function RestaurantPortal() {
       return;
     }
 
-    if (role !== "owner") {
+    if (role !== "owner" && role !== "waiter" && role !== "kitchen") {
       setRestaurant(null);
       setHotelStatus(null);
       return;
@@ -190,16 +193,16 @@ export default function RestaurantPortal() {
     const restaurantId = readClaim(current.access_token, "restaurant_id");
     if (!restaurantId) throw new Error("Your restaurant could not be identified. Sign out and sign in again.");
 
-    const [restaurantResult, orderResult, serviceFeeResult, codResult] = await Promise.all([
-      supabase.from("restaurants").select(
+    const restaurantResult = await supabase.from("restaurants").select(
         "id,name,phone,address,fssai,logo_url,gst_mode,gst_rate,gstin,service_charge_pct,upi_id,mode,is_open,languages,online_orders_enabled,online_delivery_enabled,online_pickup_enabled,online_upi_enabled,online_cod_enabled,online_delivery_fee,online_cod_fee,online_application_status,online_application_review,online_orders_admin_hold,online_orders_admin_hold_reason,online_orders_paid_through",
-      ).eq("id", restaurantId).single(),
-      supabase.rpc("restaurant_online_orders", { p_limit: 100 }),
-      supabase.rpc("online_order_service_monthly_fee"),
-      supabase.rpc("online_cod_available"),
+      ).eq("id", restaurantId).single();
+    if (restaurantResult.error) throw restaurantResult.error;
+    const [orderResult, serviceFeeResult, codResult] = await Promise.all([
+      role === "kitchen" ? Promise.resolve({ data: [], error: null }) : supabase.rpc("restaurant_online_orders", { p_limit: 100 }),
+      role === "owner" ? supabase.rpc("online_order_service_monthly_fee") : Promise.resolve({ data: 0, error: null }),
+      role === "owner" ? supabase.rpc("online_cod_available") : Promise.resolve({ data: false, error: null }),
     ]);
-
-    const failure = restaurantResult.error || orderResult.error || serviceFeeResult.error || codResult.error;
+    const failure = orderResult.error || serviceFeeResult.error || codResult.error;
     if (failure) throw failure;
 
     const row = restaurantResult.data as Restaurant;
@@ -209,6 +212,8 @@ export default function RestaurantPortal() {
       window.localStorage.getItem("qrdine:restaurant-alert-sound") === "on") playOwnerAlertSound();
     seenOnlineOrderIds.current = pendingOnlineIds;
     setRestaurant(row);
+    setPortalRole(role);
+    setTab(role === "kitchen" ? "kitchen" : role === "waiter" ? "qr-orders" : (tab === "kitchen" ? "qr-orders" : tab));
     setHotelStatus(null);
     setOrders(onlineRows);
     const serviceFee = Number(serviceFeeResult.data ?? 0);
@@ -245,7 +250,7 @@ export default function RestaurantPortal() {
       return;
     }
     const role = getAppRole(current.access_token);
-    if (role && !["owner", "owner_blocked"].includes(role)) {
+    if (role && !["owner", "owner_blocked", "waiter", "kitchen"].includes(role)) {
       rejectedAccountSignout.current = true;
       await customerSupabase().auth.signOut();
       setSession(null);
@@ -294,12 +299,31 @@ export default function RestaurantPortal() {
   }, [acceptSession]);
 
   useEffect(() => {
-    if (!session || getAppRole(session.access_token) !== "owner") return;
+    if (!session || !["owner", "waiter", "kitchen"].includes(getAppRole(session.access_token) ?? "")) return;
     const timer = window.setInterval(() => {
       void loadRestaurantDashboard(session).catch((loadError) => setError(errorText(loadError)));
     }, 30_000);
     return () => window.clearInterval(timer);
   }, [session, loadRestaurantDashboard]);
+
+  useEffect(() => {
+    if (!session || getAppRole(session.access_token) !== "owner" || !restaurant) return;
+    let active = true;
+    let stopListening = () => {};
+    void listenForWebPush((payload) => {
+      const data = payload.data ?? {};
+      const title = data.title ?? payload.notification?.title ?? "QR Dine restaurant alert";
+      const body = data.body ?? payload.notification?.body ?? "A new restaurant update needs your attention.";
+      if (window.localStorage.getItem("qrdine:restaurant-alert-sound") === "on") playOwnerAlertSound();
+      if (document.visibilityState !== "visible" && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification(title, { body, icon: "/icons/icon-192.png" });
+      }
+    }).then((unsubscribe) => {
+      if (active) stopListening = unsubscribe;
+      else unsubscribe();
+    }).catch((pushError) => setError(errorText(pushError)));
+    return () => { active = false; stopListening(); };
+  }, [restaurant, session]);
 
   async function submitAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -586,6 +610,19 @@ export default function RestaurantPortal() {
 
   const pendingOrders = orders.filter((order) => order.status === "pending");
   const completedOrders = orders.filter((order) => order.status === "completed");
+  const navigation: [PortalTab, string, string][] = portalRole === "owner"
+    ? [
+        ["qr-orders", "QR & table orders", ""],
+        ["orders", "Online orders", pendingOrders.length ? `${pendingOrders.length} new` : ""],
+        ["menu", "Menu", ""],
+        ["tables", "Tables", ""],
+        ["insights", "Insights", ""],
+        ["settings", "Settings", ""],
+        ["kitchen", "Kitchen display", ""],
+      ]
+    : portalRole === "waiter"
+      ? [["qr-orders", "QR & table orders", ""], ["orders", "Online orders", pendingOrders.length ? `${pendingOrders.length} new` : ""], ["tables", "Tables", ""]]
+      : [["kitchen", "Kitchen display", ""]];
   return (
     <main className="restaurant-portal">
       <header className="portal-topbar">
@@ -599,14 +636,7 @@ export default function RestaurantPortal() {
       <div className="portal-workspace">
         <aside className="portal-sidebar">
           <p>RESTAURANT WORKSPACE</p>
-          {([
-            ["qr-orders", "QR & table orders", ""],
-            ["orders", "Online orders", pendingOrders.length ? `${pendingOrders.length} new` : ""],
-            ["menu", "Menu", ""],
-            ["tables", "Tables", ""],
-            ["insights", "Insights", ""],
-            ["settings", "Settings", ""],
-          ] as [PortalTab, string, string][]).map(([key, label, badge]) => (
+          {navigation.map(([key, label, badge]) => (
             <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
               <span>{label}</span>{badge && <small>{badge}</small>}
             </button>
@@ -627,6 +657,7 @@ export default function RestaurantPortal() {
                 tables: "Table manager",
                 insights: "Restaurant insights",
                 settings: "Restaurant settings",
+                kitchen: "Kitchen display",
               })[tab]}</h1>
               <p>{({
                 "qr-orders": "Manage guest requests, prepare dine-in orders, and settle table bills.",
@@ -635,19 +666,20 @@ export default function RestaurantPortal() {
                 tables: "Create dining tables, manage sessions, and print QR codes.",
                 insights: "Review sales, customer feedback, cash counts, and invoices.",
                 settings: "Manage your restaurant profile, staff, billing, and online-order setup.",
+                kitchen: "Track accepted orders and mark items ready for service.",
               })[tab]}</p>
             </div>
-            {(tab === "orders" || tab === "qr-orders") && <button className="portal-secondary" onClick={() => void refreshDashboard()} disabled={busy}>↻ Refresh</button>}
+            {(tab === "orders" || tab === "qr-orders" || tab === "kitchen") && <button className="portal-secondary" onClick={() => void refreshDashboard()} disabled={busy}>↻ Refresh</button>}
           </div>
           {error && <p className="portal-message error" role="alert">{error}</p>}
           {notice && <p className="portal-message success" role="status">{notice}</p>}
-          {(tab === "orders" || tab === "settings") && restaurant.online_orders_admin_hold && (
+          {portalRole === "owner" && (tab === "orders" || tab === "settings") && restaurant.online_orders_admin_hold && (
             <div className="portal-status-banner state-hold">
               <strong>Online orders are on hold</strong>
               <span>{restaurant.online_orders_admin_hold_reason || "Contact platform support for details."}</span>
             </div>
           )}
-          {(tab === "orders" || tab === "settings") && !serviceActive && restaurant.online_orders_enabled && !restaurant.online_orders_admin_hold && (
+          {portalRole === "owner" && (tab === "orders" || tab === "settings") && !serviceActive && restaurant.online_orders_enabled && !restaurant.online_orders_admin_hold && (
             <div className="portal-status-banner state-hold">
               <strong>Online-order service is inactive</strong>
               <span>{serviceMonthlyFee > 0 ? `Online-order service fee: ${rupees(serviceMonthlyFee)} per month. Contact the platform administrator to record payment.` : "Contact the platform administrator to review your online-order service access."}</span>
@@ -708,15 +740,16 @@ export default function RestaurantPortal() {
             </>
           )}
           {tab === "qr-orders" && <RestaurantQrOrders restaurantId={restaurant.id} />}
-          {tab === "menu" && <RestaurantMenuManager restaurantId={restaurant.id} languages={restaurant.languages} onRefresh={refreshDashboard} />}
-          {tab === "tables" && <RestaurantTablesManager
+          {tab === "kitchen" && <RestaurantQrOrders restaurantId={restaurant.id} kitchenMode />}
+          {portalRole === "owner" && tab === "menu" && <RestaurantMenuManager restaurantId={restaurant.id} languages={restaurant.languages} onRefresh={refreshDashboard} />}
+          {(portalRole === "owner" || portalRole === "waiter") && tab === "tables" && <RestaurantTablesManager
             restaurantId={restaurant.id}
             restaurantName={restaurant.name}
             onRefresh={refreshDashboard}
             onOpenOrders={() => setTab("qr-orders")}
           />}
-          {tab === "insights" && <RestaurantInsights restaurantId={restaurant.id} />}
-          {tab === "settings" && (
+          {portalRole === "owner" && tab === "insights" && <RestaurantInsights restaurantId={restaurant.id} />}
+          {portalRole === "owner" && tab === "settings" && (
             <>
               <RestaurantSettingsPanel
                 restaurant={restaurant}

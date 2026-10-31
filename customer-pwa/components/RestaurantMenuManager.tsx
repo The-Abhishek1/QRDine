@@ -264,6 +264,36 @@ export default function RestaurantMenuManager({
     }, "Category deleted.");
   }
 
+  async function moveCategory(category: Category, offset: -1 | 1) {
+    const index = data.categories.findIndex((item) => item.id === category.id);
+    const target = index + offset;
+    if (target < 0 || target >= data.categories.length) return;
+    const reordered = [...data.categories];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    await mutate(async () => {
+      for (const [sort, item] of reordered.entries()) {
+        const { error: moveError } = await customerSupabase().from("categories").update({ sort })
+          .eq("id", item.id).eq("restaurant_id", restaurantId);
+        if (moveError) throw moveError;
+      }
+    }, "Category order updated.");
+  }
+
+  async function moveDish(dish: Dish, offset: -1 | 1) {
+    const rows = data.dishes.filter((item) => item.category_id === dish.category_id);
+    const index = rows.findIndex((item) => item.id === dish.id);
+    const target = index + offset;
+    if (target < 0 || target >= rows.length) return;
+    [rows[index], rows[target]] = [rows[target], rows[index]];
+    await mutate(async () => {
+      for (const [sort, item] of rows.entries()) {
+        const { error: moveError } = await customerSupabase().from("dishes").update({ sort })
+          .eq("id", item.id).eq("restaurant_id", restaurantId);
+        if (moveError) throw moveError;
+      }
+    }, "Dish order updated.");
+  }
+
   function resetDishEditor(dish: Dish | null) {
     setEditingDish(dish);
     setDishName(dish?.name ?? "");
@@ -658,8 +688,10 @@ export default function RestaurantMenuManager({
         <button className="portal-action-primary" disabled={busy}>{editingCategory ? "Save category" : "Add category"}</button>
         {editingCategory && <button className="portal-secondary" type="button" onClick={() => { setEditingCategory(null); setCategoryName(""); setCategoryTranslations({}); setCategoryFrom(""); setCategoryTo(""); }}>Cancel edit</button>}
       </form>
-      <div className="portal-settings-list">{data.categories.map((category) => <article className="portal-setting-item" key={category.id}>
+      <div className="portal-settings-list">{data.categories.map((category, index) => <article className="portal-setting-item" key={category.id}>
         <div><strong>{category.name}</strong><span>{category.kind}{category.avail_from && category.avail_to ? ` · ${category.avail_from.slice(0, 5)}–${category.avail_to.slice(0, 5)}` : ""} · {data.dishes.filter((dish) => dish.category_id === category.id).length} dishes</span></div>
+        <button className="portal-secondary" aria-label={`Move ${category.name} up`} title="Move up" onClick={() => void moveCategory(category, -1)} disabled={busy || index === 0}>↑</button>
+        <button className="portal-secondary" aria-label={`Move ${category.name} down`} title="Move down" onClick={() => void moveCategory(category, 1)} disabled={busy || index === data.categories.length - 1}>↓</button>
         <button className="portal-secondary" onClick={() => beginEditCategory(category)} disabled={busy}>Edit</button>
         <button className="portal-action-danger" onClick={() => void deleteCategory(category)} disabled={busy}>Delete</button>
       </article>)}</div>
@@ -671,7 +703,7 @@ export default function RestaurantMenuManager({
         const rows = data.dishes.filter((dish) => dish.category_id === category.id);
         return <section className="portal-menu-category" key={category.id}>
           <h3>{category.name}</h3>
-          {rows.length ? rows.map((dish) => {
+          {rows.length ? rows.map((dish, index) => {
             const variants = data.variants.filter((variant) => variant.dish_id === dish.id);
             return <article className="portal-dish-row portal-managed-dish" key={dish.id}>
               {dish.image_url && <img src={dish.image_url} alt="" />}
@@ -680,6 +712,8 @@ export default function RestaurantMenuManager({
               </div>
               <label className="portal-switch"><input type="checkbox" checked={dish.is_available} onChange={(event) => void setDishFlag(dish, "is_available", event.target.checked)} disabled={busy} />Menu</label>
               <label className="portal-switch"><input type="checkbox" checked={dish.online_available} onChange={(event) => void setDishFlag(dish, "online_available", event.target.checked)} disabled={busy || !dish.is_available} />Online</label>
+              <button className="portal-secondary" aria-label={`Move ${dish.name} up`} title="Move up" onClick={() => void moveDish(dish, -1)} disabled={busy || index === 0}>↑</button>
+              <button className="portal-secondary" aria-label={`Move ${dish.name} down`} title="Move down" onClick={() => void moveDish(dish, 1)} disabled={busy || index === rows.length - 1}>↓</button>
               <button className="portal-secondary" onClick={() => resetDishEditor(dish)} disabled={busy}>Edit</button>
               <button className="portal-action-danger" onClick={() => void deleteDish(dish)} disabled={busy}>Remove</button>
             </article>;

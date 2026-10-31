@@ -36,7 +36,11 @@ const EMPTY: OrderData = { orders: [], items: [], sessions: [], tables: [], requ
 const EMPTY_MENU: StaffMenu = { dishes: [], variants: [], groups: [], addons: [], links: [] };
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : "The request failed. Please try again."; }
 
-export default function RestaurantQrOrders({ restaurantId }: { restaurantId: string }) {
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+}
+
+export default function RestaurantQrOrders({ restaurantId, kitchenMode = false }: { restaurantId: string; kitchenMode?: boolean }) {
   const [data, setData] = useState<OrderData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -56,6 +60,29 @@ export default function RestaurantQrOrders({ restaurantId }: { restaurantId: str
   const [staffLines, setStaffLines] = useState<StaffLine[]>([]);
   const [staffNote, setStaffNote] = useState("");
   const seenPendingOrderIds = useRef<Set<string> | null>(null);
+
+  function printKitchenTicket(order: Order) {
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setError("Your browser blocked the kitchen ticket window. Allow pop-ups and try again.");
+      return;
+    }
+    const width = window.localStorage.getItem("qrdine:printer-width") === "80" ? "80mm" : "58mm";
+    const items = data.items.filter((item) => item.order_id === order.id && !item.cancelled).map((item) => `
+      <li><strong>${item.qty} × ${escapeHtml(item.name_snapshot)}${item.variant_snapshot ? ` · ${escapeHtml(item.variant_snapshot)}` : ""}${item.offer_free ? " · FREE" : ""}</strong>
+      ${item.addons?.length ? `<small>Extras: ${escapeHtml(item.addons.map((addon) => addon.name).join(", "))}</small>` : ""}
+      ${item.instructions ? `<small>Note: ${escapeHtml(item.instructions)}</small>` : ""}</li>`).join("");
+    popup.onload = () => { popup.focus(); popup.print(); };
+    popup.document.write(`<!doctype html><html><head><title>Kitchen ticket · ${escapeHtml(tableForSession(order.session_id))}</title><style>
+      @page{size:${width} auto;margin:3mm}body{font:14px Arial,sans-serif;color:#000;width:100%;margin:0}
+      h1{text-align:center;font-size:20px;margin:0 0 7px}.meta{display:flex;justify-content:space-between;border-top:1px dashed #000;border-bottom:1px dashed #000;padding:6px 0}
+      ul{list-style:none;padding:0;margin:8px 0}li{display:grid;gap:4px;padding:7px 0;border-bottom:1px dotted #777}
+      small{font-size:12px}p{font-weight:bold;overflow-wrap:anywhere}
+      </style></head><body><h1>${escapeHtml(tableForSession(order.session_id))} · ${escapeHtml(order.order_type.replaceAll("_", " ").toUpperCase())}</h1>
+      <div class="meta"><span>${new Date(order.created_at).toLocaleString()}</span><span>${order.source === "staff" ? "STAFF" : "GUEST"}</span></div>
+      ${order.note ? `<p>ORDER NOTE: ${escapeHtml(order.note)}</p>` : ""}<ul>${items}</ul></body></html>`);
+    popup.document.close();
+  }
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -103,6 +130,29 @@ export default function RestaurantQrOrders({ restaurantId }: { restaurantId: str
     const timer = window.setInterval(() => { void refresh(); }, 15_000);
     return () => window.clearInterval(timer);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!kitchenMode || !("wakeLock" in navigator)) return;
+    let active = true;
+    let wakeLock: WakeLockSentinel | null = null;
+    const requestWakeLock = async () => {
+      try {
+        wakeLock = await navigator.wakeLock.request("screen");
+      } catch (wakeError) {
+        if (active) setError(`Could not keep this kitchen display awake: ${messageOf(wakeError)}`);
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && (!wakeLock || wakeLock.released)) void requestWakeLock();
+    };
+    void requestWakeLock();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (wakeLock && !wakeLock.released) void wakeLock.release();
+    };
+  }, [kitchenMode]);
 
   async function act(action: () => Promise<void>, success?: string) {
     setBusy(true);
@@ -294,29 +344,30 @@ export default function RestaurantQrOrders({ restaurantId }: { restaurantId: str
 
   const pending = data.orders.filter((order) => order.status === "pending");
   const accepted = data.orders.filter((order) => order.status === "accepted");
+  const visibleOrders = kitchenMode ? accepted : data.orders;
   const activeSessions = data.sessions.filter((session) => session.status !== "paid");
 
-  return <div className="portal-qr-orders">
+  return <div className={`portal-qr-orders ${kitchenMode ? "portal-kitchen-mode" : ""}`}>
     {(error || notice) && <p className={`portal-message ${error ? "error" : "success"}`} role={error ? "alert" : "status"}>{error || notice}</p>}
-    <div className="portal-metrics">
+    {!kitchenMode && <div className="portal-metrics">
       <article><span>Needs attention</span><strong>{pending.length}</strong><small>Waiting for approval</small></article>
       <article><span>In kitchen</span><strong>{accepted.length}</strong><small>Accepted orders</small></article>
       <article><span>Open tables</span><strong>{activeSessions.length}</strong><small>Guest sessions</small></article>
       <article><span>Guest requests</span><strong>{data.requests.length}</strong><small>Waiter and bill requests</small></article>
-    </div>
-    <section className="portal-panel">
+    </div>}
+    {!kitchenMode && <section className="portal-panel">
       <div className="portal-section-title"><div><h2>Guest requests</h2><p>Resolve waiter calls and bill requests.</p></div><button className="portal-secondary" onClick={() => void refresh()} disabled={loading}>↻ Refresh</button></div>
       {data.requests.length ? <div className="portal-settings-list">{data.requests.map((request) => <article className="portal-setting-item" key={request.id}>
         <div><strong>{tableForSession(request.session_id)} · {request.type === "bill" ? "Bill requested" : "Waiter requested"}</strong><span>{new Date(request.created_at).toLocaleString()}</span></div>
         {request.type === "bill" && <button className="portal-action-primary" onClick={() => void openBill(request.session_id)} disabled={busy}>Open bill</button>}
         <button className="portal-secondary" onClick={() => void resolveRequest(request)} disabled={busy}>Resolve</button>
       </article>)}</div> : <p className="portal-form-hint">No open guest requests.</p>}
-    </section>
+    </section>}
     <section className="portal-panel">
-      <div className="portal-section-title"><div><h2>Table QR orders</h2><p>Review new orders and follow preparation progress.</p></div></div>
-      {loading ? <div className="portal-loading-inline"><span className="portal-spinner" /> Loading orders…</div> : !data.orders.length
-        ? <p className="portal-form-hint">No active QR/table orders.</p>
-        : <div className="portal-order-list">{data.orders.map((order) => {
+      <div className="portal-section-title"><div><h2>{kitchenMode ? "Cooking now" : "Table QR orders"}</h2><p>{kitchenMode ? "Keep this screen open for active kitchen tickets." : "Review new orders and follow preparation progress."}</p></div></div>
+      {loading ? <div className="portal-loading-inline"><span className="portal-spinner" /> Loading orders…</div> : !visibleOrders.length
+        ? <p className="portal-form-hint">{kitchenMode ? "No accepted orders in the kitchen." : "No active QR/table orders."}</p>
+        : <div className="portal-order-list">{visibleOrders.map((order) => {
           const items = data.items.filter((item) => item.order_id === order.id);
           const session = data.sessions.find((row) => row.id === order.session_id);
           return <article className="portal-order-card" key={order.id}>
@@ -328,33 +379,37 @@ export default function RestaurantQrOrders({ restaurantId }: { restaurantId: str
               {item.addons?.length ? <small>Extras: {item.addons.map((addon) => addon.name).join(", ")}</small> : null}
               {item.instructions && <small>Note: {item.instructions}</small>}
               {item.cancel_reason && <small>Cancellation: {item.cancel_reason}</small>}
-              {!item.cancelled && <button type="button" className="portal-secondary portal-cancel-item" onClick={() => void cancelItem(item)} disabled={busy}>Cancel item</button>}
+              {!kitchenMode && !item.cancelled && <button type="button" className="portal-secondary portal-cancel-item" onClick={() => void cancelItem(item)} disabled={busy}>Cancel item</button>}
             </li>)}</ul>
             <div className="portal-order-actions">
-              {order.status === "pending" && <>
+              {!kitchenMode && order.status === "pending" && <>
                 <label className="portal-eta">Preparation time <input type="number" min="1" max="240" value={eta[order.id] ?? "30"} onChange={(event) => setEta((current) => ({ ...current, [order.id]: event.target.value }))} /> min</label>
                 <button className="portal-action-primary" onClick={() => void orderAction(order, "accept")} disabled={busy}>Accept order</button>
                 <button className="portal-action-danger" onClick={() => void orderAction(order, "reject")} disabled={busy}>Reject</button>
               </>}
-              {order.status === "accepted" && <>
+              {order.status === "accepted" && (kitchenMode ? <>
+                <span>{order.ready_at ? "Ready for serving" : order.eta_minutes ? `ETA ${order.eta_minutes} min` : "Preparing"}</span>
+                {!order.ready_at && <button className="portal-action-primary" onClick={() => void orderAction(order, "ready")} disabled={busy}>Mark ready</button>}
+              </> : <>
                 <span>{order.ready_at ? "Ready for serving" : order.eta_minutes ? `ETA ${order.eta_minutes} min` : "Preparing"}</span>
                 {!order.ready_at && <button className="portal-secondary" onClick={() => void orderAction(order, "ready")} disabled={busy}>Mark ready</button>}
                 <button className="portal-action-primary" onClick={() => void orderAction(order, "complete")} disabled={busy}>Mark served</button>
-              </>}
-              {session && <button className="portal-secondary" onClick={() => void openBill(session.id)} disabled={busy}>View bill</button>}
+              </>)}
+              {!kitchenMode && <button className="portal-secondary" onClick={() => printKitchenTicket(order)}>Print kitchen ticket</button>}
+              {!kitchenMode && session && <button className="portal-secondary" onClick={() => void openBill(session.id)} disabled={busy}>View bill</button>}
             </div>
           </article>;
         })}</div>}
     </section>
-    <section className="portal-panel">
+    {!kitchenMode && <section className="portal-panel">
       <div className="portal-section-title"><div><h2>Open table bills</h2><p>Review the bill, apply a coupon or manager discount, and record payment.</p></div></div>
       {activeSessions.length ? <div className="portal-settings-list">{activeSessions.map((session) => <article className="portal-setting-item" key={session.id}>
         <div><strong>{tableForSession(session.id)}</strong><span>{session.status.replaceAll("_", " ")} · Opened {new Date(session.opened_at).toLocaleString()}</span></div>
         {session.status === "active" && <button className="portal-secondary" onClick={() => void openStaffOrder(session)} disabled={busy || staffMenuLoading}>Add staff order</button>}
         <button className="portal-action-primary" onClick={() => void openBill(session.id)} disabled={busy}>Review bill</button>
       </article>)}</div> : <p className="portal-form-hint">No open table bills.</p>}
-    </section>
-    {staffSession && <div className="portal-modal-backdrop"><form className="portal-dialog" onSubmit={(event) => void submitStaffOrder(event)}>
+    </section>}
+    {!kitchenMode && staffSession && <div className="portal-modal-backdrop"><form className="portal-dialog" onSubmit={(event) => void submitStaffOrder(event)}>
       <header><div><h2>Add staff order · {tableForSession(staffSession.id)}</h2><p>Send an order from the restaurant team to the kitchen.</p></div><button type="button" className="portal-secondary" onClick={() => setStaffSession(null)}>Close</button></header>
       {staffMenuLoading ? <div className="portal-loading-inline"><span className="portal-spinner" /> Loading menu options…</div> : staffMenu.dishes.length === 0
         ? <p className="portal-form-hint">No available dishes are configured for this menu.</p>

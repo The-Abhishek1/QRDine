@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { customerSupabase } from "@/lib/customerSupabase";
 import { rupees } from "@/lib/money";
 import { playOwnerAlertSound } from "@/lib/ownerAlerts";
+import { isWebPushConfigured, registerWebPush, unregisterWebPush } from "@/lib/webPush";
 
 type SettingsRestaurant = {
   id: string;
@@ -146,6 +147,8 @@ export default function RestaurantSettingsPanel({
   const [couponMaxUses, setCouponMaxUses] = useState("");
   const [fileInputKey, setFileInputKey] = useState(0);
   const [alertSoundEnabled, setAlertSoundEnabled] = useState(false);
+  const [webPushEnabled, setWebPushEnabled] = useState(false);
+  const [printerWidth, setPrinterWidth] = useState<"58" | "80">("58");
 
   const run = useCallback(async (action: () => Promise<void>, success?: string) => {
     setSaving(true);
@@ -187,6 +190,8 @@ export default function RestaurantSettingsPanel({
 
   useEffect(() => {
     setAlertSoundEnabled(window.localStorage.getItem("qrdine:restaurant-alert-sound") === "on");
+    setWebPushEnabled(window.localStorage.getItem("qrdine:web-push-enabled") === "on");
+    setPrinterWidth(window.localStorage.getItem("qrdine:printer-width") === "80" ? "80" : "58");
   }, []);
 
   const gstRateNumber = Number(gstRate);
@@ -403,6 +408,59 @@ export default function RestaurantSettingsPanel({
     if (enabled) playOwnerAlertSound();
   }
 
+  function printTestTicket() {
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setError("Your browser blocked the printer test window. Allow pop-ups and try again.");
+      return;
+    }
+    popup.onload = () => { popup.focus(); popup.print(); };
+    popup.document.write(`<!doctype html><html><head><title>QR Dine printer test</title><style>@page{size:${printerWidth}mm auto;margin:3mm}body{font:14px Arial,sans-serif;color:#000;width:100%;margin:0;text-align:center}h1{font-size:20px}hr{border:0;border-top:1px dashed #000}</style></head><body><h1>QR Dine</h1><p>Printer test · ${printerWidth} mm</p><hr><p>Rs 1,234.00 · OK</p><p>If you can read this, printing works.</p><hr></body></html>`);
+    popup.document.close();
+  }
+
+  async function toggleBackgroundAlerts() {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const supabase = customerSupabase();
+      if (webPushEnabled) {
+        const token = window.localStorage.getItem("qrdine:web-push-token");
+        if (token) {
+          const { error: deleteError } = await supabase.from("devices").delete()
+            .eq("restaurant_id", restaurant.id).eq("fcm_token", token);
+          if (deleteError) throw deleteError;
+        }
+        await unregisterWebPush();
+        window.localStorage.removeItem("qrdine:web-push-token");
+        window.localStorage.setItem("qrdine:web-push-enabled", "off");
+        setWebPushEnabled(false);
+        setMessage("Background order alerts are disabled on this browser.");
+      } else {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (!userData.user) throw new Error("Sign in again before enabling order notifications.");
+        const token = await registerWebPush();
+        const { error: saveError } = await supabase.from("devices").upsert({
+          restaurant_id: restaurant.id, user_id: userData.user.id, fcm_token: token,
+        }, { onConflict: "restaurant_id,fcm_token" });
+        if (saveError) {
+          await unregisterWebPush();
+          throw saveError;
+        }
+        window.localStorage.setItem("qrdine:web-push-token", token);
+        window.localStorage.setItem("qrdine:web-push-enabled", "on");
+        setWebPushEnabled(true);
+        setMessage("Background order alerts are enabled on this browser.");
+      }
+    } catch (pushError) {
+      setError(messageOf(pushError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return <div className="portal-settings-layout portal-settings-full">
     {(error || message) && <div className={`portal-settings-notice portal-message ${error ? "error" : "success"}`} role={error ? "alert" : "status"}>{error || message}</div>}
     <Section title="Restaurant profile" detail="These details appear on your customer menu and printed bills.">
@@ -511,15 +569,29 @@ export default function RestaurantSettingsPanel({
       </form>
     </Section>
 
-    <Section title="Browser alerts and receipts" detail="Browser permissions are managed per device and browser.">
+    <Section title="Browser alerts and receipts" detail="Browser permissions and print preferences are managed per browser/device.">
       <div className="portal-settings-toggle"><div><strong>Order notifications</strong><span>{typeof window !== "undefined" && "Notification" in window ? `Permission: ${Notification.permission}` : "Notifications are not supported in this browser."}</span></div><button className="portal-secondary" onClick={() => void testBrowserAlert()} disabled={saving || busy}>Send test notification</button></div>
+      <div className="portal-settings-toggle"><div><strong>Alerts when this dashboard is closed</strong><span>{isWebPushConfigured() ? "Register this browser to receive new-order push alerts." : "Firebase web messaging is not configured for this deployment."}</span></div><button className={webPushEnabled ? "portal-action-danger" : "portal-secondary"} onClick={() => void toggleBackgroundAlerts()} disabled={saving || busy || (!webPushEnabled && !isWebPushConfigured())}>{webPushEnabled ? "Disable background alerts" : "Enable background alerts"}</button></div>
+      <div className="portal-settings-toggle"><div><strong>Alert readiness</strong><span>
+        {typeof window === "undefined" ? "Checking browser support…" : [
+          window.isSecureContext ? "Secure connection: ready" : "Secure connection: required for notifications",
+          "Notification" in window ? `Browser notifications: ${Notification.permission}` : "Browser notifications: unsupported",
+          isWebPushConfigured() ? (window.localStorage.getItem("qrdine:web-push-token") ? "Background push: registered on this browser" : "Background push: configured but not registered") : "Background push: deployment configuration missing",
+        ].join(" · ")}
+      </span></div></div>
       <fieldset className="portal-options portal-settings-options">
         <legend>Play a sound for new orders</legend>
         <label><input type="radio" name="owner-alert-sound" checked={alertSoundEnabled} onChange={() => updateAlertSound(true)} /> On</label>
         <label><input type="radio" name="owner-alert-sound" checked={!alertSoundEnabled} onChange={() => updateAlertSound(false)} /> Off</label>
       </fieldset>
       <p className="portal-form-hint">Sound alerts work while this dashboard is open. Browser notification permission is controlled separately above.</p>
-      <div className="portal-settings-toggle"><div><strong>Print receipt or kitchen ticket</strong><span>Use your browser's print dialog to select a connected receipt printer or save as PDF.</span></div><button className="portal-secondary" onClick={() => window.print()}>Open print dialog</button></div>
+      <div className="portal-settings-toggle"><div><strong>Receipt and kitchen ticket paper width</strong><span>Used by the printable invoice and kitchen-ticket layouts; choose your printer destination in the system dialog.</span></div>
+        <fieldset className="portal-options portal-settings-options">
+          <legend>Paper width</legend>
+          {(["58", "80"] as const).map((width) => <label key={width}><input type="radio" name="printer-width" checked={printerWidth === width} onChange={() => { setPrinterWidth(width); window.localStorage.setItem("qrdine:printer-width", width); }} />{width} mm</label>)}
+        </fieldset>
+      </div>
+      <div className="portal-settings-toggle"><div><strong>Test receipt printer</strong><span>Choose a browser-connected printer in the print dialog, then check alignment and paper size.</span></div><button className="portal-secondary" onClick={printTestTicket}>Print test ticket</button></div>
     </Section>
 
     <Section title="Account" detail="Owner credentials and password.">

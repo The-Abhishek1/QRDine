@@ -1318,6 +1318,17 @@ button, input, textarea, select { color: inherit; }
 .portal-staff-order-line-heading { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
 .portal-staff-order-line-heading .portal-action-danger { min-height: 32px; padding: 4px 8px; font-size: .76rem; }
 .portal-qr-orders .portal-loading-inline { display: flex; align-items: center; gap: 10px; padding: 20px; color: var(--muted); }
+.portal-kitchen-mode .portal-panel { padding: clamp(18px, 3vw, 32px); }
+.portal-kitchen-mode .portal-section-title h2 { font-size: clamp(1.6rem, 3vw, 2.4rem); }
+.portal-kitchen-mode .portal-order-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 16px; }
+.portal-kitchen-mode .portal-order-card { padding: clamp(18px, 2.5vw, 28px); border-color: color-mix(in srgb, var(--peacock) 28%, var(--line)); box-shadow: 0 8px 26px rgba(0, 0, 0, .06); }
+.portal-kitchen-mode .portal-order-number { font-size: clamp(1.25rem, 2.4vw, 1.8rem); }
+.portal-kitchen-mode .portal-order-heading small { font-size: .9rem; }
+.portal-kitchen-mode .portal-order-status { font-size: .85rem; }
+.portal-kitchen-mode .portal-qr-order-items { gap: 14px; }
+.portal-kitchen-mode .portal-qr-order-items li { font-size: clamp(1rem, 1.7vw, 1.3rem); }
+.portal-kitchen-mode .portal-qr-order-items li > small { font-size: .9rem; }
+.portal-kitchen-mode .portal-order-actions > button { min-height: 48px; font-size: 1rem; }
 .portal-insights, .portal-tables-manager { display: grid; gap: 16px; }
 .portal-insights-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .portal-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }

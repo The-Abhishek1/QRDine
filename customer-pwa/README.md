@@ -6,7 +6,7 @@ The QR Dine PWA is a Next.js application for customer ordering and a restaurant-
 2. **Online ordering** at `/explore`, with customer authentication and delivery or pickup from approved restaurants.
 3. **Restaurant workspace** at `/restaurant`, with owner login/signup and web equivalents for the core restaurant-management workflows in the Android owner module.
 
-The restaurant workspace is responsive for desktop and mobile browsers. It complements the Android app with browser-based order, menu, table, settings, and reporting workflows. Native Android capabilities such as FCM delivery, Bluetooth thermal-printer integration, and background alerts still require the Android app.
+The restaurant workspace is responsive for desktop and mobile browsers. It complements the Android app with browser-based order, menu, table, settings, and reporting workflows. Browser push alerts can use the same Firebase Cloud Messaging project as Android; device-specific Bluetooth thermal printer support depends on browser and printer compatibility.
 
 ## Requirements
 
@@ -27,6 +27,7 @@ Set these variables in `.env.local`:
 | `NEXT_PUBLIC_API_BASE` | Yes | Supabase Edge Functions base URL, ending in `/functions/v1` |
 | `NEXT_PUBLIC_SUPABASE_URL` | For online accounts; recommended | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | For online accounts; recommended | Public anon/publishable key |
+| `NEXT_PUBLIC_FIREBASE_*` | Optional | Firebase Web app configuration and Web Push certificate key for browser push alerts |
 
 Example:
 
@@ -81,12 +82,16 @@ Open `/restaurant` from the home page to sign in or create a restaurant owner ac
 
 - **QR and table orders:** incoming dine-in orders, preparation and serving actions, guest waiter/bill requests, staff-entered orders, item cancellation, bill calculation, discounts/coupons, and cash/UPI/split payment settlement.
 - **Online orders:** delivery and pickup order review, payment verification, accept/reject/complete actions, online availability controls, and fulfilment/payment setup.
-- **Menu:** category and dish management, sizes/variants, optional add-on groups, Buy X Get Y offers, availability, image uploads, CSV templates/import/export, and supported-language translations.
+- **Menu:** category and dish management with ordering controls, sizes/variants, optional add-on groups, Buy X Get Y offers, availability, image uploads, CSV templates/import/export, and supported-language translations.
 - **Tables:** create and remove tables, open or cancel sessions, move/merge sessions, regenerate QR codes, and print QR sheets.
-- **Insights:** QR and online sales summaries, date/channel filters, top dishes, customer feedback and replies, cash counts, invoice history, and CSV export.
-- **Settings:** restaurant profile and logo, tax and UPI settings, QR ordering mode, languages, announcements, coupons, staff accounts, manager PIN, browser order alerts, and password updates.
+- **Insights:** QR and online sales summaries, date/channel filters, top dishes, customer feedback and follow-up notes, cash counts, invoice history, CSV export, and printable reports that can be saved as PDF.
+- **Settings:** restaurant profile and logo, tax and UPI settings, QR ordering mode, languages, announcements, coupons, waiter/kitchen staff accounts, manager PIN, browser order alerts, receipt paper width and test print, and password updates.
 
-The order-sound preference and browser notification permission are device/browser-specific. Sound alerts run only while the dashboard is open; browser printing uses the system print dialog rather than native Bluetooth printer support.
+The order-sound preference and browser notification permission are device/browser-specific. Browser push can display alerts while the dashboard is closed when Firebase Web Messaging is configured, the browser supports push, and the device allows background activity; it is not a guaranteed always-on foreground alert service. The dashboard also refreshes live order state while open.
+
+To enable browser push, register a Firebase Web app in the same project used by the backend FCM sender, enable Firebase Cloud Messaging, create a Web Push certificate key, and set the `NEXT_PUBLIC_FIREBASE_*` values in `.env.local`/the hosting provider before rebuilding. Add the deployed HTTPS origin to Firebase's authorized domains. Each owner browser must separately enable background alerts in **Settings → Browser alerts and receipts**; this registers that browser's FCM token with the restaurant. The Firebase web configuration and VAPID public key are browser-visible values, not server secrets. Keep `FCM_SERVICE_ACCOUNT_JSON` private on the backend.
+
+Browser printing uses printable receipts and kitchen-ticket layouts through the system print dialog, with 58 mm/80 mm layout selection and a test ticket. Browser security does not allow reliable silent/automatic KOT printing or direct ESC/POS printing to classic Bluetooth SPP printers. Android remains necessary for those printer paths unless a particular printer exposes a browser-compatible Bluetooth LE or USB interface. The browser ticket can be printed manually from an order.
 
 The workspace uses the public Supabase anon/publishable key with authenticated owner JWTs, existing RLS policies, and backend RPCs. It does not use a service-role key. Enable the custom Auth hook before testing: restaurant owner tokens need the correct `app_role` and `restaurant_id` claims, while customer accounts are rejected from the restaurant workspace.
 
