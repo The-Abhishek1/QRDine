@@ -15,7 +15,7 @@ export function customerSupabase(): SupabaseClient {
       !key && "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     ].filter(Boolean).join(" and ");
     throw new Error(
-      `Customer sign-in is unavailable. Add ${missing} to the Vercel project’s Environment Variables, then redeploy.`,
+      `Account sign-in is unavailable. Add ${missing} to the Vercel project’s Environment Variables, then redeploy.`,
     );
   }
   client ??= createClient(url, key);
@@ -23,10 +23,10 @@ export function customerSupabase(): SupabaseClient {
 }
 
 export function hasCustomerRole(accessToken: string): boolean {
-  return readAppRole(accessToken) === "customer";
+  return getAppRole(accessToken) === "customer";
 }
 
-function readAppRole(accessToken: string): string | null {
+export function getAppRole(accessToken: string): string | null {
   try {
     const encoded = accessToken.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
     if (!encoded) return null;
@@ -38,6 +38,6 @@ function readAppRole(accessToken: string): string | null {
 }
 
 export function isCustomerAccount(accessToken: string, userMetadata: Record<string, unknown> | undefined): boolean {
-  const role = readAppRole(accessToken);
+  const role = getAppRole(accessToken);
   return role === "customer" || (role === null && userMetadata?.account_type === "customer");
 }

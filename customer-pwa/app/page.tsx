@@ -37,7 +37,7 @@ export default function Home() {
           <span className="welcome-brand-mark">Q</span>
           <span>QR<span>Dine</span></span>
         </a>
-        <span className="welcome-nav-note"><span /> Your table, your menu</span>
+        <a className="welcome-nav-note welcome-restaurant-nav" href="/restaurant">Restaurant login &amp; signup <span aria-hidden="true">→</span></a>
       </header>
 
       <section className="welcome-hero">
@@ -48,10 +48,11 @@ export default function Home() {
             Scan the QR code at your table to explore the menu, make it yours with extras, and send your order
             straight to the kitchen.
           </p>
-          <a className="welcome-cta" href="/explore">Order online from restaurants <span aria-hidden="true">→</span></a>
-          <a className="welcome-cta" href="#how-it-works">
-            See how it works <span aria-hidden="true">↓</span>
-          </a>
+          <div className="welcome-actions">
+            <a className="welcome-cta" href="/explore">Order online from restaurants <span aria-hidden="true">→</span></a>
+            <a className="welcome-cta welcome-cta-secondary" href="/restaurant">Restaurant dashboard <span aria-hidden="true">→</span></a>
+            <a className="welcome-how-link" href="#how-it-works">See how it works <span aria-hidden="true">↓</span></a>
+          </div>
           <div className="welcome-promise">
             <span className="promise-check">✓</span>
             No app download. No account. Just scan and enjoy.
