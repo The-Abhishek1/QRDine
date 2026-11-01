@@ -84,6 +84,19 @@ type HotelStatus = {
 type PortalTab = "qr-orders" | "orders" | "menu" | "tables" | "insights" | "settings" | "kitchen";
 type RestaurantRole = "owner" | "waiter" | "kitchen";
 
+function PortalNavIcon({ name }: { name: PortalTab }) {
+  const paths: Record<PortalTab, string> = {
+    "qr-orders": "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h2v2h-2z M18 14h2v6h-2z M14 18h2v2h-2z",
+    orders: "M5 4h14v16H5z M8 8h8 M8 12h8 M8 16h5",
+    menu: "M4 6h16 M4 12h16 M4 18h16",
+    tables: "M4 5h7v6H4z M13 5h7v6h-7z M4 13h7v6H4z M13 13h7v6h-7z",
+    insights: "M4 19V5 M4 19h16 M8 15v-4 M13 15V7 M18 15v-6",
+    settings: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.6 2.8-.2-.1a1.7 1.7 0 0 0-1.9.3l-.1.1h-3.2l-.1-.2a1.7 1.7 0 0 0-1.5-1h-.2l-2.8-1.6.1-.2a1.7 1.7 0 0 0-.3-1.9l-.1-.1v-3.2l.2-.1a1.7 1.7 0 0 0 1-1.5v-.2l1.6-2.8.2.1a1.7 1.7 0 0 0 1.9-.3l.1-.1h3.2l.1.2a1.7 1.7 0 0 0 1.5 1h.2l2.8 1.6-.1.2a1.7 1.7 0 0 0 .3 1.9l.1.1V15z",
+    kitchen: "M4 5h16v15H4z M8 3v4 M16 3v4 M4 10h16 M8 14h3 M8 17h7",
+  };
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>;
+}
+
 function readClaim(token: string, key: string): string | null {
   try {
     const encoded = token.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
@@ -175,6 +188,7 @@ export default function RestaurantPortal() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [tab, setTab] = useState<PortalTab>("qr-orders");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [portalRole, setPortalRole] = useState<RestaurantRole>("owner");
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [hotelStatus, setHotelStatus] = useState<HotelStatus | null>(null);
@@ -639,19 +653,20 @@ export default function RestaurantPortal() {
 
   const pendingOrders = orders.filter((order) => order.status === "pending");
   const completedOrders = orders.filter((order) => order.status === "completed");
-  const navigation: [PortalTab, string, string, string][] = portalRole === "owner"
+  const navigation: [string, PortalTab, string, string, string][] = portalRole === "owner"
     ? [
-        ["qr-orders", "QR & table orders", "QR orders", ""],
-        ["orders", "Online orders", "Online", pendingOrders.length ? String(pendingOrders.length) : ""],
-        ["menu", "Menu", "Menu", ""],
-        ["tables", "Tables", "Tables", ""],
-        ["insights", "Insights", "Insights", ""],
-        ["settings", "Settings", "Settings", ""],
-        ["kitchen", "Kitchen display", "Kitchen", ""],
+        ["OPERATIONS", "qr-orders", "QR & table orders", "QR orders", ""],
+        ["OPERATIONS", "orders", "Online orders", "Online", pendingOrders.length ? String(pendingOrders.length) : ""],
+        ["MANAGE", "menu", "Menu", "Menu", ""],
+        ["MANAGE", "tables", "Tables", "Tables", ""],
+        ["MANAGE", "insights", "Insights", "Insights", ""],
+        ["MANAGE", "settings", "Settings", "Settings", ""],
+        ["WORKSPACE", "kitchen", "Kitchen display", "Kitchen", ""],
       ]
     : portalRole === "waiter"
-      ? [["qr-orders", "QR & table orders", "QR orders", ""], ["orders", "Online orders", "Online", pendingOrders.length ? String(pendingOrders.length) : ""], ["tables", "Tables", "Tables", ""]]
-      : [["kitchen", "Kitchen display", "Kitchen", ""]];
+      ? [["OPERATIONS", "qr-orders", "QR & table orders", "QR orders", ""], ["OPERATIONS", "orders", "Online orders", "Online", pendingOrders.length ? String(pendingOrders.length) : ""], ["MANAGE", "tables", "Tables", "Tables", ""]]
+      : [["WORKSPACE", "kitchen", "Kitchen display", "Kitchen", ""]];
+  const navigationGroups = [...new Set(navigation.map(([group]) => group))];
   return (
     <main className="restaurant-portal">
       <header className="portal-topbar">
@@ -662,19 +677,46 @@ export default function RestaurantPortal() {
         </div>
         <button className="portal-signout" onClick={() => void signOut()} disabled={busy}>Sign out</button>
       </header>
-      <div className="portal-workspace">
+      <div className={`portal-workspace ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <nav className="portal-sidebar" aria-label="Restaurant workspace">
-          <p>RESTAURANT WORKSPACE</p>
-          {navigation.map(([key, label, mobileLabel, badge]) => (
-            <button key={key} type="button" className={tab === key ? "active" : ""} aria-current={tab === key ? "page" : undefined} onClick={() => setTab(key)}>
-              <span className="portal-nav-label">{label}</span>
-              <span className="portal-nav-mobile-label">{mobileLabel}</span>
-              {badge && <small aria-label={`${badge} pending online orders`}>{badge}</small>}
+          <div className="portal-sidebar-head">
+            <div className="portal-sidebar-mark" aria-hidden="true">Q</div>
+            <div className="portal-sidebar-identity"><strong>Restaurant</strong><span>Management workspace</span></div>
+            <button
+              type="button"
+              className="portal-sidebar-collapse"
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!sidebarCollapsed}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={sidebarCollapsed ? "m9 18 6-6-6-6" : "m15 18-6-6 6-6"} /></svg>
             </button>
+          </div>
+          {navigationGroups.map((group) => (
+            <div className="portal-sidebar-group" key={group}>
+              <p>{group}</p>
+              {navigation.filter(([navGroup]) => navGroup === group).map(([, key, label, mobileLabel, badge]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={tab === key ? "active" : ""}
+                  aria-current={tab === key ? "page" : undefined}
+                  aria-label={label}
+                  title={label}
+                  onClick={() => setTab(key)}
+                >
+                  <span className="portal-nav-icon"><PortalNavIcon name={key} /></span>
+                  <span className="portal-nav-label">{label}</span>
+                  <span className="portal-nav-mobile-label">{mobileLabel}</span>
+                  {badge && <small aria-label={`${badge} pending online orders`}>{badge}</small>}
+                </button>
+              ))}
+            </div>
           ))}
           <div className="portal-sidebar-bottom">
             <span className={`portal-health-dot ${restaurant.online_orders_enabled && serviceActive ? "online" : ""}`} />
-            <span>{statusLabel}</span>
+            <div><strong>{restaurant.online_orders_enabled && serviceActive ? "Store is live" : "Store status"}</strong><span>{statusLabel}</span></div>
           </div>
         </nav>
         <section className="portal-main">
