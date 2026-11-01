@@ -67,8 +67,14 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
       <div className="tools">
         <input type="search" placeholder={t("search")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("search")} />
         <label className="chip-toggle">
-          <input type="checkbox" checked={vegOnly} onChange={(e) => setVegOnly(e.target.checked)} />
-          <span><VegMark veg /> {t("vegOnly")}</span>
+          <input
+            type="checkbox"
+            checked={vegOnly}
+            onChange={(e) => setVegOnly(e.target.checked)}
+            aria-label={t("vegOnly")}
+          />
+          <span className="filter-check" aria-hidden="true" />
+          <span className="filter-label">{t("vegOnly")}</span>
         </label>
         {onRefresh && (
           <button className="menu-refresh" type="button" onClick={() => void refreshMenu()} disabled={refreshing} aria-label="Refresh menu">

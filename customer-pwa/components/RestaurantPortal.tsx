@@ -639,19 +639,19 @@ export default function RestaurantPortal() {
 
   const pendingOrders = orders.filter((order) => order.status === "pending");
   const completedOrders = orders.filter((order) => order.status === "completed");
-  const navigation: [PortalTab, string, string][] = portalRole === "owner"
+  const navigation: [PortalTab, string, string, string][] = portalRole === "owner"
     ? [
-        ["qr-orders", "QR & table orders", ""],
-        ["orders", "Online orders", pendingOrders.length ? `${pendingOrders.length} new` : ""],
-        ["menu", "Menu", ""],
-        ["tables", "Tables", ""],
-        ["insights", "Insights", ""],
-        ["settings", "Settings", ""],
-        ["kitchen", "Kitchen display", ""],
+        ["qr-orders", "QR & table orders", "QR orders", ""],
+        ["orders", "Online orders", "Online", pendingOrders.length ? String(pendingOrders.length) : ""],
+        ["menu", "Menu", "Menu", ""],
+        ["tables", "Tables", "Tables", ""],
+        ["insights", "Insights", "Insights", ""],
+        ["settings", "Settings", "Settings", ""],
+        ["kitchen", "Kitchen display", "Kitchen", ""],
       ]
     : portalRole === "waiter"
-      ? [["qr-orders", "QR & table orders", ""], ["orders", "Online orders", pendingOrders.length ? `${pendingOrders.length} new` : ""], ["tables", "Tables", ""]]
-      : [["kitchen", "Kitchen display", ""]];
+      ? [["qr-orders", "QR & table orders", "QR orders", ""], ["orders", "Online orders", "Online", pendingOrders.length ? String(pendingOrders.length) : ""], ["tables", "Tables", "Tables", ""]]
+      : [["kitchen", "Kitchen display", "Kitchen", ""]];
   return (
     <main className="restaurant-portal">
       <header className="portal-topbar">
@@ -663,18 +663,20 @@ export default function RestaurantPortal() {
         <button className="portal-signout" onClick={() => void signOut()} disabled={busy}>Sign out</button>
       </header>
       <div className="portal-workspace">
-        <aside className="portal-sidebar">
+        <nav className="portal-sidebar" aria-label="Restaurant workspace">
           <p>RESTAURANT WORKSPACE</p>
-          {navigation.map(([key, label, badge]) => (
-            <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
-              <span>{label}</span>{badge && <small>{badge}</small>}
+          {navigation.map(([key, label, mobileLabel, badge]) => (
+            <button key={key} type="button" className={tab === key ? "active" : ""} aria-current={tab === key ? "page" : undefined} onClick={() => setTab(key)}>
+              <span className="portal-nav-label">{label}</span>
+              <span className="portal-nav-mobile-label">{mobileLabel}</span>
+              {badge && <small aria-label={`${badge} pending online orders`}>{badge}</small>}
             </button>
           ))}
           <div className="portal-sidebar-bottom">
             <span className={`portal-health-dot ${restaurant.online_orders_enabled && serviceActive ? "online" : ""}`} />
             <span>{statusLabel}</span>
           </div>
-        </aside>
+        </nav>
         <section className="portal-main">
           <div className="portal-page-heading">
             <div>
@@ -713,6 +715,17 @@ export default function RestaurantPortal() {
               <strong>Online-order service is inactive</strong>
               <span>{serviceMonthlyFee > 0 ? `Online-order service fee: ${rupees(serviceMonthlyFee)} per month. Contact the platform administrator to record payment.` : "Contact the platform administrator to review your online-order service access."}</span>
             </div>
+          )}
+          {tab === "qr-orders" && pendingOrders.length > 0 && (
+            <section className="portal-attention-banner" aria-label="Pending online orders">
+              <div>
+                <strong>{pendingOrders.length} online {pendingOrders.length === 1 ? "order needs" : "orders need"} your attention</strong>
+                <span>Review and respond to pending customer orders.</span>
+              </div>
+              <button type="button" onClick={() => setTab("orders")}>
+                Review {pendingOrders.length === 1 ? "order" : "orders"} <span aria-hidden="true">→</span>
+              </button>
+            </section>
           )}
           {tab === "orders" && (
             <>

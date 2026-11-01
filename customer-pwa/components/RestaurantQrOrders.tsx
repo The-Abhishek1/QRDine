@@ -350,7 +350,7 @@ export default function RestaurantQrOrders({ restaurantId, kitchenMode = false }
   return <div className={`portal-qr-orders ${kitchenMode ? "portal-kitchen-mode" : ""}`}>
     {(error || notice) && <p className={`portal-message ${error ? "error" : "success"}`} role={error ? "alert" : "status"}>{error || notice}</p>}
     {!kitchenMode && <div className="portal-metrics">
-      <article><span>Needs attention</span><strong>{pending.length}</strong><small>Waiting for approval</small></article>
+      <article><span>QR orders needing attention</span><strong>{pending.length}</strong><small>Waiting for approval</small></article>
       <article><span>In kitchen</span><strong>{accepted.length}</strong><small>Accepted orders</small></article>
       <article><span>Open tables</span><strong>{activeSessions.length}</strong><small>Guest sessions</small></article>
       <article><span>Guest requests</span><strong>{data.requests.length}</strong><small>Waiter and bill requests</small></article>
