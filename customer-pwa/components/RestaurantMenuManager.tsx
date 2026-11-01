@@ -8,7 +8,8 @@ type Category = { id: string; name: string; kind: "food" | "beverage"; sort: num
 type Dish = {
   id: string; category_id: string; name: string; description: string | null; image_url: string | null;
   base_price: number; original_price: number | null; is_veg: boolean; is_available: boolean;
-  online_available: boolean; stock_qty: number | null; name_i18n?: Record<string, string> | null;
+  online_available: boolean; stock_qty: number | null; avail_from: string | null; avail_to: string | null;
+  name_i18n?: Record<string, string> | null;
   description_i18n?: Record<string, string> | null;
 };
 type Variant = { id: string; dish_id: string; name: string; price: number; original_price: number | null };
@@ -155,6 +156,8 @@ export default function RestaurantMenuManager({
   const [dishOriginalPrice, setDishOriginalPrice] = useState("");
   const [dishVeg, setDishVeg] = useState(true);
   const [dishStock, setDishStock] = useState("");
+  const [dishFrom, setDishFrom] = useState("");
+  const [dishTo, setDishTo] = useState("");
   const [dishImage, setDishImage] = useState<File | null>(null);
   const [dishVariants, setDishVariants] = useState<Array<{ name: string; price: string; originalPrice: string }>>([]);
   const [dishGroupIds, setDishGroupIds] = useState<string[]>([]);
@@ -178,7 +181,7 @@ export default function RestaurantMenuManager({
     const supabase = customerSupabase();
     const [categories, dishes, variants, groups, addons, links, offers] = await Promise.all([
       supabase.from("categories").select("id,name,kind,sort,avail_from,avail_to,name_i18n").eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort"),
-      supabase.from("dishes").select("id,category_id,name,description,image_url,base_price,original_price,is_veg,is_available,online_available,stock_qty,name_i18n,description_i18n").eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort"),
+      supabase.from("dishes").select("id,category_id,name,description,image_url,base_price,original_price,is_veg,is_available,online_available,stock_qty,avail_from,avail_to,name_i18n,description_i18n").eq("restaurant_id", restaurantId).is("deleted_at", null).order("sort"),
       supabase.from("dish_variants").select("id,dish_id,name,price,original_price").eq("restaurant_id", restaurantId).order("price"),
       supabase.from("addon_groups").select("id,name,min_select,max_select").eq("restaurant_id", restaurantId).order("name"),
       supabase.from("addons").select("id,group_id,name,price,is_available").eq("restaurant_id", restaurantId).order("name"),
@@ -303,6 +306,8 @@ export default function RestaurantMenuManager({
     setDishOriginalPrice(dish?.original_price ? String(dish.original_price / 100) : "");
     setDishVeg(dish?.is_veg ?? true);
     setDishStock(dish?.stock_qty?.toString() ?? "");
+    setDishFrom(dish?.avail_from?.slice(0, 5) ?? "");
+    setDishTo(dish?.avail_to?.slice(0, 5) ?? "");
     setDishImage(null);
     setDishVariants(dish ? data.variants.filter((variant) => variant.dish_id === dish.id).map((variant) => ({
       name: variant.name, price: String(variant.price / 100), originalPrice: variant.original_price ? String(variant.original_price / 100) : "",
@@ -321,12 +326,13 @@ export default function RestaurantMenuManager({
       name: variant.name.trim(), price: toPaise(variant.price), original: variant.originalPrice ? toPaise(variant.originalPrice) : null,
     }));
     if (!dishName.trim() || !dishCategory || price === null || (dishOriginalPrice && (originalPrice === null || originalPrice <= price)) ||
+      Boolean(dishFrom) !== Boolean(dishTo) ||
       (stock !== null && (!Number.isInteger(stock) || stock < 0)) ||
       variants.some((variant) => !variant.name || variant.price === null || variant.price <= 0 ||
         (variant.original !== null && variant.original <= variant.price)) ||
       dishVariants.some((variant, index) => variant.originalPrice.trim() && variants[index].original === null) ||
       new Set(variants.map((variant) => variant.name.toLowerCase())).size !== variants.length) {
-      setError("Check the dish name, category, price, stock, and unique size prices.");
+      setError("Check the dish name, category, price, stock, serving hours, and unique size prices. Set both serving times or leave both empty.");
       return;
     }
     await mutate(async () => {
@@ -346,7 +352,8 @@ export default function RestaurantMenuManager({
       const dishValues = {
         category_id: dishCategory, name: dishName.trim(), description: dishDescription.trim() || null,
         image_url: imageUrl, base_price: price, original_price: originalPrice, is_veg: dishVeg,
-        stock_qty: stock, name_i18n: nameI18n, description_i18n: descriptionI18n,
+        stock_qty: stock, avail_from: dishFrom || null, avail_to: dishTo || null,
+        name_i18n: nameI18n, description_i18n: descriptionI18n,
       };
       if (dishId) {
         const { error: updateError } = await supabase.from("dishes").update(dishValues).eq("id", dishId).eq("restaurant_id", restaurantId);
@@ -707,7 +714,7 @@ export default function RestaurantMenuManager({
             const variants = data.variants.filter((variant) => variant.dish_id === dish.id);
             return <article className="portal-dish-row portal-managed-dish" key={dish.id}>
               {dish.image_url && <img src={dish.image_url} alt="" />}
-              <div><strong>{dish.name}</strong><span>{rupees(dish.base_price)}{dish.original_price ? ` · list ${rupees(dish.original_price)}` : ""} · {dish.is_veg ? "Veg" : "Non-veg"}{dish.stock_qty !== null ? ` · stock ${dish.stock_qty}` : ""}</span>
+              <div><strong>{dish.name}</strong><span>{rupees(dish.base_price)}{dish.original_price ? ` · list ${rupees(dish.original_price)}` : ""} · {dish.is_veg ? "Veg" : "Non-veg"}{dish.stock_qty !== null ? ` · stock ${dish.stock_qty}` : ""}{dish.avail_from && dish.avail_to ? ` · ${dish.avail_from.slice(0, 5)}–${dish.avail_to.slice(0, 5)}` : ""}</span>
                 {variants.length > 0 && <small>{variants.map((variant) => `${variant.name}: ${rupees(variant.price)}`).join(" · ")}</small>}
               </div>
               <label className="portal-switch"><input type="checkbox" checked={dish.is_available} onChange={(event) => void setDishFlag(dish, "is_available", event.target.checked)} disabled={busy} />Menu</label>
@@ -751,7 +758,7 @@ export default function RestaurantMenuManager({
     </section>
 
     <section className="portal-panel">
-      <div className="portal-section-title"><div><h2>Buy N, get M offers</h2><p>Offers are applied automatically to eligible QR/table orders.</p></div></div>
+      <div className="portal-section-title"><div><h2>Buy N, get M offers</h2><p>Offers apply automatically to eligible QR/table and online orders.</p></div></div>
       <form className="portal-coupon-form" onSubmit={(event) => void createOffer(event)}>
         <Field label="Offer name" value={offerName} onChange={setOfferName} required />
         <label className="portal-field"><span>Buy dish</span><select value={offerBuyDish} onChange={(event) => setOfferBuyDish(event.target.value)} required><option value="">Select dish</option>{data.dishes.map((dish) => <option key={dish.id} value={dish.id}>{dish.name}</option>)}</select></label>
@@ -779,6 +786,11 @@ export default function RestaurantMenuManager({
           <Field label="Base price (₹)" value={dishPrice} onChange={setDishPrice} type="number" required />
           <Field label="Original price (₹, optional)" value={dishOriginalPrice} onChange={setDishOriginalPrice} type="number" />
           <Field label="Stock quantity (blank = unlimited)" value={dishStock} onChange={setDishStock} type="number" />
+        </div>
+        <div className="portal-coupon-form">
+          <Field label="Serve from (optional)" value={dishFrom} onChange={setDishFrom} type="time" />
+          <Field label="Serve until (optional)" value={dishTo} onChange={setDishTo} type="time" />
+          <p className="portal-form-hint">Set both times to schedule this dish daily. Overnight hours are supported; leave both blank for all-day availability. Category hours also apply.</p>
         </div>
         <label className="portal-settings-checkbox"><input type="checkbox" checked={dishVeg} onChange={(event) => setDishVeg(event.target.checked)} /> Vegetarian</label>
         <div className="portal-dish-variants">

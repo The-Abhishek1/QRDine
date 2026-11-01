@@ -6,6 +6,7 @@ import type { CartLine } from "@/lib/cart";
 import { lineKey, unitPrice } from "@/lib/cart";
 import { autoOfferRewardLines, freeOfferQuantities } from "@/lib/offers";
 import { customerSupabase, hasCustomerRole, isCustomerAccount } from "@/lib/customerSupabase";
+import { listenForWebPush, registerWebPush, unregisterWebPush } from "@/lib/webPush";
 import { I18nContext, makeI18n } from "@/lib/i18n";
 import type { Dish, Menu } from "@/lib/types";
 import MenuView from "@/components/MenuView";
@@ -57,6 +58,10 @@ type OnlineOrder = {
   customer_feedback: string | null;
   created_at: string;
   reject_reason: string | null;
+  refund_status: "not_required" | "required" | "refunded";
+  refund_reference: string | null;
+  refund_note: string | null;
+  refund_processed_at: string | null;
 };
 
 function rupees(paise: number) {
@@ -113,6 +118,8 @@ export default function CustomerExplore() {
   const [authConfigured, setAuthConfigured] = useState(false);
   const [configurationError, setConfigurationError] = useState<string | null>(null);
   const [customerRoleReady, setCustomerRoleReady] = useState(false);
+  const [customerPushEnabled, setCustomerPushEnabled] = useState(false);
+  const [customerPushBusy, setCustomerPushBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -234,6 +241,71 @@ export default function CustomerExplore() {
   }, [session, customerRoleReady]);
 
   useEffect(() => {
+    if (!session || !customerRoleReady) {
+      setCustomerPushEnabled(false);
+      return;
+    }
+    let active = true;
+    customerSupabase().from("customer_push_devices").select("token")
+      .eq("customer_id", session.user.id)
+      .then(({ data, error: deviceError }) => {
+        if (!active) return;
+        if (deviceError) {
+          setError("Could not check your order-notification settings.");
+          return;
+        }
+        const savedToken = window.localStorage.getItem("qrdine:customer-push-token");
+        setCustomerPushEnabled(Boolean(savedToken && data?.some((device) => device.token === savedToken)));
+      });
+    return () => { active = false; };
+  }, [session, customerRoleReady]);
+
+  useEffect(() => {
+    if (!session || !customerRoleReady) return;
+    let active = true;
+    const refresh = async () => {
+      const { data, error: refreshError } = await customerSupabase().rpc("customer_online_orders", { p_limit: 25 });
+      if (!active) return;
+      if (refreshError) {
+        setError("Could not check for order updates. Check your connection and refresh.");
+        return;
+      }
+      const rows = Array.isArray(data) ? data as OnlineOrder[] : [];
+      setOrders(rows);
+      setActiveOrder((current) => current ? rows.find((order) => order.id === current.id) ?? current : null);
+    };
+    const timer = window.setInterval(() => void refresh(), 15000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [session, customerRoleReady]);
+
+  useEffect(() => {
+    if (!session || !customerRoleReady || !customerPushEnabled) return;
+    let active = true;
+    let stopListening = () => {};
+    listenForWebPush((payload) => {
+      const data = payload.data ?? {};
+      if (data.kind !== "online_order_update") return;
+      setMessage(data.body || "Your online order was updated.");
+      void customerSupabase().rpc("customer_online_orders", { p_limit: 25 }).then(({ data: rows, error: refreshError }) => {
+        if (!active) return;
+        if (refreshError) {
+          setError("You received an order update, but the latest details could not be loaded.");
+          return;
+        }
+        const latest = Array.isArray(rows) ? rows as OnlineOrder[] : [];
+        setOrders(latest);
+        setActiveOrder((current) => current ? latest.find((order) => order.id === current.id) ?? current : null);
+      });
+    }).then((stop) => {
+      if (active) stopListening = stop;
+      else stop();
+    }).catch(() => {
+      if (active) setError("Could not start live order notifications. Check your browser notification settings.");
+    });
+    return () => { active = false; stopListening(); };
+  }, [session, customerRoleReady, customerPushEnabled]);
+
+  useEffect(() => {
     if (!session || !selectedRestaurant) return;
     let active = true;
     const requestId = ++menuRequestId.current;
@@ -318,7 +390,16 @@ export default function CustomerExplore() {
   async function signOut() {
     setLoading(true);
     try {
-      const { error: authError } = await customerSupabase().auth.signOut();
+      const supabase = customerSupabase();
+      const token = window.localStorage.getItem("qrdine:customer-push-token");
+      if (session && token) {
+        const { error: deleteError } = await supabase.from("customer_push_devices")
+          .delete().eq("customer_id", session.user.id).eq("token", token);
+        if (deleteError) throw deleteError;
+        await unregisterWebPush();
+        window.localStorage.removeItem("qrdine:customer-push-token");
+      }
+      const { error: authError } = await supabase.auth.signOut();
       if (authError) throw authError;
       setSession(null);
       setRestaurants([]);
@@ -512,16 +593,19 @@ export default function CustomerExplore() {
               .filter((addon) => line.addonIds.includes(addon.id))
               .map((addon) => ({ id: addon.id, name: addon.name, price: addon.price })) ?? [],
             instructions: line.instructions || null,
-            offer_free_qty: offerFreeQuantities.get(line.key) ?? 0,
           };
         }),
-        offer_discount: offerDiscount,
+        offer_discount: 0,
         eta_minutes: null,
         accepted_at: null,
         customer_rating: null,
         customer_feedback: null,
         created_at: new Date().toISOString(),
         reject_reason: null,
+        refund_status: "not_required",
+        refund_reference: null,
+        refund_note: null,
+        refund_processed_at: null,
       };
       setActiveOrder(createdOrder);
       setOrders((current) => [createdOrder, ...current.filter((order) => order.id !== createdOrder.id)]);
@@ -603,6 +687,56 @@ export default function CustomerExplore() {
       setError("Could not refresh your order status. Please try again.");
     } finally {
       setOrdersRefreshing(false);
+    }
+  }
+
+  async function toggleCustomerPush() {
+    if (!session || !customerRoleReady || customerPushBusy) return;
+    setCustomerPushBusy(true);
+    setError(null);
+    try {
+      const supabase = customerSupabase();
+      const savedToken = window.localStorage.getItem("qrdine:customer-push-token");
+      if (customerPushEnabled && savedToken) {
+        const { error: deleteError } = await supabase.from("customer_push_devices")
+          .delete().eq("customer_id", session.user.id).eq("token", savedToken);
+        if (deleteError) throw deleteError;
+        await unregisterWebPush();
+        window.localStorage.removeItem("qrdine:customer-push-token");
+        setCustomerPushEnabled(false);
+        setMessage("Order notifications disabled on this browser.");
+      } else {
+        const token = await registerWebPush();
+        const { error: saveError } = await supabase.from("customer_push_devices")
+          .upsert({ customer_id: session.user.id, token }, { onConflict: "customer_id,token" });
+        if (saveError) throw saveError;
+        window.localStorage.setItem("qrdine:customer-push-token", token);
+        setCustomerPushEnabled(true);
+        setMessage("Order notifications enabled on this browser.");
+      }
+    } catch (pushError) {
+      setError(pushError instanceof Error ? pushError.message : "Could not update order notifications.");
+    } finally {
+      setCustomerPushBusy(false);
+    }
+  }
+
+  async function cancelOnlineOrder(order: OnlineOrder) {
+    if (order.status !== "pending" || orderBusy) return;
+    if (!window.confirm("Cancel this order? Once the restaurant accepts it, cancellation must be arranged directly with the restaurant.")) return;
+    setOrderBusy(true);
+    setError(null);
+    try {
+      const { error: cancelError } = await customerSupabase().rpc("customer_cancel_online_order", { p_order_id: order.id });
+      if (cancelError) throw cancelError;
+      setMessage(order.refund_status === "required"
+        ? "Order cancelled. The restaurant will review whether a UPI refund is due and update the status here."
+        : "Order cancelled.");
+      await refreshCustomerOrders();
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : "Could not cancel this order. Refresh its status and try again.");
+    } finally {
+      setOrderBusy(false);
     }
   }
 
@@ -741,6 +875,7 @@ export default function CustomerExplore() {
                             <div className="online-total">
                               <span>Items {rupees(subtotal)}</span>
                               {offerDiscount > 0 && <span className="online-offer-discount">Offer discount −{rupees(offerDiscount)}</span>}
+                              {offerDiscount > 0 && <small>Offer rewards and final savings are confirmed when the order is placed.</small>}
                               {fulfilment === "delivery" && <span>Delivery {rupees(selectedRestaurant.online_delivery_fee)}</span>}
                               {paymentMethod === "cod" && <span>COD fee {rupees(selectedRestaurant.online_cod_fee)}</span>}
                               <strong>Total {rupees(discountedSubtotal + (fulfilment === "delivery" ? selectedRestaurant.online_delivery_fee : 0) + (paymentMethod === "cod" ? selectedRestaurant.online_cod_fee : 0))}</strong>
@@ -782,11 +917,30 @@ export default function CustomerExplore() {
                   {activeOrder && (
                     <section className="online-order-detail">
                       <h3>Order #{activeOrder.id.slice(0, 8)} · {activeOrder.status.replaceAll("_", " ")}</h3>
-                      {activeOrder.status === "accepted" && activeOrder.eta_minutes != null && (
-                        <p className="online-order-eta">Accepted · estimated preparation time: {activeOrder.eta_minutes} minutes</p>
+                      {["pending", "accepted", "preparing", "ready", "completed"].includes(activeOrder.status) && (
+                        <ol className="online-order-progress" aria-label="Order progress">
+                          {[
+                            ["pending", "Received"],
+                            ["accepted", "Accepted"],
+                            ["preparing", "Preparing"],
+                            ["ready", "Ready"],
+                            ["completed", "Complete"],
+                          ].map(([status, label]) => {
+                            const stage = ["pending", "accepted", "preparing", "ready", "completed"].indexOf(activeOrder.status);
+                            const index = ["pending", "accepted", "preparing", "ready", "completed"].indexOf(status);
+                            return <li key={status} className={index <= stage ? "done" : ""}>{label}</li>;
+                          })}
+                        </ol>
                       )}
+                      {activeOrder.status === "accepted" && activeOrder.eta_minutes != null && (
+                        <p className="online-order-eta">Estimated preparation time: {activeOrder.eta_minutes} minutes</p>
+                      )}
+                      {activeOrder.status === "pending" && <button className="btn-outline" type="button" disabled={orderBusy} onClick={() => void cancelOnlineOrder(activeOrder)}>Cancel order</button>}
                       {activeOrder.status === "completed" && <p>Your order is complete.</p>}
                       {activeOrder.reject_reason && <p className="error">{activeOrder.reject_reason}</p>}
+                      {activeOrder.refund_status === "required" && <p className="online-refund-notice">UPI refund review is pending. The restaurant will contact you or update the refund status here. QR Dine does not move money or issue refunds automatically.</p>}
+                      {activeOrder.refund_status === "refunded" && <p className="online-refund-notice">The restaurant marked the UPI refund as sent{activeOrder.refund_reference ? ` (reference: ${activeOrder.refund_reference})` : ""}. If it does not appear in your account, contact the restaurant with your order number.</p>}
+                      {activeOrder.refund_note && <p className="online-refund-notice">Refund review: {activeOrder.refund_note}</p>}
                       <ul className="online-order-items">
                         {activeOrder.items_snapshot.map((item, index) => (
                           <li key={`${activeOrder.id}-${index}`}>
@@ -823,6 +977,12 @@ export default function CustomerExplore() {
                   {orders.length > 0 && (
                     <section className="online-order-history">
                       <h3>Your online orders</h3>
+                      <div className="online-notification-setting">
+                        <div><strong>Order updates</strong><small>Get order-status and refund updates in this browser.</small></div>
+                        <button className="btn-outline" type="button" onClick={() => void toggleCustomerPush()} disabled={customerPushBusy || !customerRoleReady}>
+                          {customerPushBusy ? "Please wait…" : customerPushEnabled ? "Disable notifications" : "Enable notifications"}
+                        </button>
+                      </div>
                       <button className="link" type="button" disabled={ordersRefreshing} onClick={() => void refreshCustomerOrders()}>
                         {ordersRefreshing ? "Refreshing orders…" : "Refresh order status"}
                       </button>
@@ -841,6 +1001,9 @@ export default function CustomerExplore() {
                             ))}
                           </ul>
                           {order.status === "accepted" && order.eta_minutes != null && <small>Estimated preparation time: {order.eta_minutes} minutes</small>}
+                          {order.refund_status === "required" && <small>UPI refund review pending. The restaurant needs to confirm whether a refund is due.</small>}
+                          {order.refund_status === "refunded" && <small>Refund marked sent{order.refund_reference ? ` · ${order.refund_reference}` : ""}. Contact the restaurant if it has not arrived.</small>}
+                          {order.refund_note && <small>Refund review: {order.refund_note}</small>}
                           {order.offer_discount > 0 && <small>Offer discount −{rupees(order.offer_discount)}</small>}
                           {order.reject_reason && <small>{order.reject_reason}</small>}
                         </article>

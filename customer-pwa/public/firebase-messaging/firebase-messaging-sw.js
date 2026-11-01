@@ -13,19 +13,20 @@ if (self.__QRDINE_FIREBASE_CONFIG?.apiKey && self.__QRDINE_FIREBASE_CONFIG?.appI
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       tag: data.order_id || data.request_id || data.review_id || "qrdine-restaurant",
-      data: { url: "/restaurant" },
+      data: { url: data.kind === "online_order_update" ? "/explore" : "/restaurant" },
     });
   });
 }
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const url = event.notification.data?.url || "/restaurant";
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-    const existing = clients.find((client) => "focus" in client);
+    const existing = clients.find((client) => "focus" in client && new URL(client.url).origin === self.location.origin);
     if (existing) {
-      existing.navigate("/restaurant");
+      existing.navigate(url);
       return existing.focus();
     }
-    return self.clients.openWindow("/restaurant");
+    return self.clients.openWindow(url);
   }));
 });

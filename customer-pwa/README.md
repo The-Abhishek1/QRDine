@@ -63,11 +63,11 @@ npm start
 
 ### Table QR orders
 
-The QR flow validates the signed token through `session-join`, loads table/menu state, and submits orders through backend functions. It supports menu categories and search, sizes, optional extras, notes, restaurant offers, cart, order status, bill requests, UPI payment handoff, and post-order reviews. Session tokens and server-side pricing prevent the browser from deciding trusted prices or restaurant identity.
+The QR flow validates the signed token through `session-join`, loads table/menu state, and submits orders through backend functions. It supports menu categories and search, sizes, optional extras, notes, restaurant offers, cart, order status, pending-order cancellation, bill requests, UPI payment handoff, and post-order reviews. Guests can cancel only while an order is pending; after restaurant acceptance, they need to contact staff. Session tokens and server-side pricing prevent the browser from deciding trusted prices or restaurant identity.
 
 ### Online orders
 
-Customers register/sign in with a customer account, complete their delivery profile, browse the approved online restaurant directory, and place delivery or pickup orders. The PWA displays order status, items, fees, payment state, and feedback controls. Online ordering requires:
+Customers register/sign in with a customer account, complete their delivery profile, browse the approved online restaurant directory, and place delivery or pickup orders. The PWA displays staged order progress, items, fees, payment/refund state, and feedback controls. Customers can cancel while an order is still pending. Push notifications are opt-in per browser; while the page is open, order status is also refreshed periodically. Buy N Get M rewards and discounts are recalculated by the database when the order is placed, so the saved order snapshot is authoritative. Online ordering requires:
 
 - The customer-account and online-ordering migrations.
 - `online-restaurants` and `online-menu` Edge Functions.
@@ -78,6 +78,8 @@ After enabling the Auth hook, customers should sign out and back in so their acc
 
 UPI payment handoff does not verify payment. The restaurant must check the transfer and confirm it using the configured order workflow. COD is subject to platform and restaurant settings.
 
+Apply `20261103000001_online_order_updates_and_refunds.sql` and `20261104000001_guest_order_cancellation.sql` before deploying these order lifecycle controls. Restaurants progress online orders through accepted, preparing, ready, and completed states. Online cancellation is available only while an order is pending. Refunds are not transferred by QR Dine: for eligible cancelled/rejected UPI orders, restaurant staff must review the payment, send any refund outside the app, and record its reference (or record why no refund is due).
+
 Customers submitting a UPI reference must also upload a JPEG, PNG, or WebP payment screenshot (up to 5 MB). Proofs are stored in the private `payment-proofs` Supabase Storage bucket; the customer and restaurant staff can access the submitted image through short-lived signed links. Apply the `20261101000001_online_payment_proofs.sql` migration before enabling this flow.
 
 ### Restaurant workspace
@@ -86,14 +88,14 @@ Open `/restaurant` from the home page to sign in or create a restaurant owner ac
 
 - **QR and table orders:** incoming dine-in orders, preparation and serving actions, guest waiter/bill requests, staff-entered orders, item cancellation, bill calculation, discounts/coupons, and cash/UPI/split payment settlement.
 - **Online orders:** delivery and pickup order review, payment verification, accept/reject/complete actions, online availability controls, and fulfilment/payment setup.
-- **Menu:** category and dish management with ordering controls, sizes/variants, optional add-on groups, Buy X Get Y offers, availability, image uploads, CSV templates/import/export, and supported-language translations.
+- **Menu:** category and dish management with ordering controls, daily category and per-dish serving hours, sizes/variants, optional add-on groups, Buy X Get Y offers, availability, image uploads, CSV templates/import/export, and supported-language translations. Apply the `20261102000001_dish_serving_windows.sql` migration before deploying this editor.
 - **Tables:** create and remove tables, open or cancel sessions, move/merge sessions, regenerate QR codes, and print QR sheets.
 - **Insights:** QR and online sales summaries, date/channel filters, top dishes, customer feedback and follow-up notes, cash counts, invoice history, CSV export, and printable reports that can be saved as PDF.
 - **Settings:** restaurant profile and logo, tax and UPI settings, QR ordering mode, languages, announcements, coupons, waiter/kitchen staff accounts, manager PIN, browser order alerts, receipt paper width and test print, and password updates.
 
 The order-sound preference and browser notification permission are device/browser-specific. Browser push can display alerts while the dashboard is closed when Firebase Web Messaging is configured, the browser supports push, and the device allows background activity; it is not a guaranteed always-on foreground alert service. The dashboard also refreshes live order state while open.
 
-To enable browser push, register a Firebase Web app in the same project used by the backend FCM sender, enable Firebase Cloud Messaging, create a Web Push certificate key, and set the `NEXT_PUBLIC_FIREBASE_*` values in `.env.local`/the hosting provider before rebuilding. Add the deployed HTTPS origin to Firebase's authorized domains. Each owner browser must separately enable background alerts in **Settings → Browser alerts and receipts**; this registers that browser's FCM token with the restaurant. The Firebase web configuration and VAPID public key are browser-visible values, not server secrets. Keep `FCM_SERVICE_ACCOUNT_JSON` private on the backend.
+To enable browser push, register a Firebase Web app in the same project used by the backend FCM sender, enable Firebase Cloud Messaging, create a Web Push certificate key, and set the `NEXT_PUBLIC_FIREBASE_*` values in `.env.local`/the hosting provider before rebuilding. Add the deployed HTTPS origin to Firebase's authorized domains. Each owner browser must separately enable background alerts in **Settings → Browser alerts and receipts**; customers enable order updates from their online order history. The Firebase web configuration and VAPID public key are browser-visible values, not server secrets. Keep `FCM_SERVICE_ACCOUNT_JSON` private on the backend.
 
 Browser printing uses printable receipts and kitchen-ticket layouts through the system print dialog, with 58 mm/80 mm layout selection and a test ticket. Browser security does not allow reliable silent/automatic KOT printing or direct ESC/POS printing to classic Bluetooth SPP printers. Android remains necessary for those printer paths unless a particular printer exposes a browser-compatible Bluetooth LE or USB interface. The browser ticket can be printed manually from an order.
 

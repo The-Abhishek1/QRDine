@@ -316,6 +316,16 @@ button:active { transform: scale(.98); }
 .online-order-detail h3, .online-order-detail p { margin: 0; }
 .online-order-detail > p { color: var(--muted); }
 .online-order-eta { padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--peacock) 12%, var(--card)); color: var(--peacock) !important; font-weight: 600; }
+.online-order-progress { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.online-order-progress li { position: relative; padding-top: 20px; color: var(--muted); font-size: .75rem; text-align: center; }
+.online-order-progress li::before { position: absolute; top: 3px; left: calc(50% - 6px); width: 12px; height: 12px; border: 2px solid var(--line); border-radius: 50%; background: var(--card); content: ""; }
+.online-order-progress li.done { color: var(--peacock); font-weight: 700; }
+.online-order-progress li.done::before { border-color: var(--peacock); background: var(--peacock); }
+.online-notification-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.online-notification-setting > div { display: grid; gap: 3px; }
+.online-notification-setting small { color: var(--muted); }
+.online-notification-setting button { flex: none; }
+.online-refund-notice { padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--peacock) 28%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--peacock) 8%, var(--card)); }
 .online-order-items {
   display: grid;
   gap: 8px;

@@ -26,6 +26,7 @@ const SERVICE_ERRORS: Record<string, string> = {
   nothing_to_bill: "nothingToBill",
   rate_limited: "waitBeforeRetry",
   session_closed: "sessionEnded",
+  order_not_pending: "orderCannotCancel",
 };
 
 const ORDER_ERRORS: Record<string, string> = {
@@ -273,6 +274,22 @@ export default function TableApp({ token }: { token: string }) {
     } finally { setSvcBusy(false); }
   }
 
+  async function cancelOrder(orderId: string) {
+    const g = guest.current;
+    if (!g || svcBusy) return;
+    setSvcBusy(true);
+    setSvcNotice(null);
+    try {
+      await api.cancelOrder(g, orderId);
+      await refresh(true);
+    } catch (e) {
+      if (e instanceof ApiError && e.code !== "network") setSvcNotice(t(SERVICE_ERRORS[e.code] ?? "genericError"));
+      else setOnline(false);
+    } finally {
+      setSvcBusy(false);
+    }
+  }
+
   async function applyCoupon(code: string): Promise<string | null> {
     const g = guest.current;
     if (!g) return null;
@@ -358,7 +375,7 @@ export default function TableApp({ token }: { token: string }) {
       <main className="content">
         {tab === "menu" && menu && <MenuView menu={menu} lines={cart} onQuickAdd={quickAdd} onQuickRemove={quickRemove} onConfigure={setConfiguring} onRefresh={() => refresh(true)} />}
         {tab === "orders" && (session
-          ? <OrdersView s={session} tableLabel={tableLabel} busy={svcBusy} notice={svcNotice} onService={service} onCoupon={applyCoupon} onRefresh={() => refresh(true)} />
+          ? <OrdersView s={session} tableLabel={tableLabel} busy={svcBusy} notice={svcNotice} onService={service} onCoupon={applyCoupon} onRefresh={() => refresh(true)} onCancel={cancelOrder} />
           : <p className="empty">…</p>)}
       </main>
 

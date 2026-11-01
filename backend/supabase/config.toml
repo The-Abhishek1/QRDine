@@ -4,6 +4,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.order-place]
 verify_jwt = false
+[functions.order-cancel]
+verify_jwt = false
 [functions.service-request]
 verify_jwt = false
 [functions.qr-sheet]

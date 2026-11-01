@@ -30,6 +30,8 @@ export const api = {
   state: (guest: string, includeMenu: boolean) => call<SessionState>("session-state", { include_menu: includeMenu }, guest),
   order: (guest: string, payload: { order_type: string; client_key: string; note?: string; items: OrderItemPayload[] }) =>
     call<{ order_id: string; duplicate: boolean }>("order-place", payload, guest),
+  cancelOrder: (guest: string, orderId: string) =>
+    call<{ ok: true }>("order-cancel", { order_id: orderId }, guest),
   service: (guest: string, type: "waiter" | "bill") => call<unknown>("service-request", { type }, guest),
   coupon: (guest: string, code: string) => call<{ discount: number; coupon: string }>("session-coupon", { code }, guest),
   review: (guest: string, payload: { food?: number; service?: number; comment?: string }) => call<{ ok: true }>("review-submit", payload, guest),

@@ -30,9 +30,10 @@ function statusLine(o: OrderView, now: number, lang: string, t: (k: string, v?: 
   }
 }
 
-export default function OrdersView({ s, tableLabel, busy, notice, onService, onCoupon, onRefresh }: {
+export default function OrdersView({ s, tableLabel, busy, notice, onService, onCoupon, onRefresh, onCancel }: {
   s: ActiveState; tableLabel: string; busy: boolean; notice: string | null; onService: (t: "waiter" | "bill") => void;
   onCoupon: (code: string) => Promise<string | null>; onRefresh: () => Promise<void>;
+  onCancel: (orderId: string) => Promise<void>;
 }) {
   const { t, lang } = useI18n();
   const now = useNow();
@@ -85,6 +86,14 @@ export default function OrdersView({ s, tableLabel, busy, notice, onService, onC
               </ul>
               {o.note && <p className="slip-note">{t("notePrefix", { note: o.note })}</p>}
               <div className="slip-total"><span>{t("orderTotal")}</span><strong>{rupees(o.total)}</strong></div>
+              {o.status === "pending" && <button
+                type="button"
+                className="btn-outline"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(t("confirmCancelOrder"))) void onCancel(o.id);
+                }}
+              >{t("cancelOrder")}</button>}
             </li>
           );
         })}

@@ -44,9 +44,11 @@ The migrations build the system in chronological order and cover:
 - Table sessions, signed guest access, server-side order pricing, idempotency, and order lifecycle controls.
 - GST/service-charge billing, coupons, invoice numbering, and restaurant insights.
 - Platform administration, restaurant approval and holds, subscriptions, payment records, staff permissions, and audit history.
-- Menu variants, stock, availability schedules, optional add-ons, translations, and Buy N Get M offers.
+- Menu variants, stock, category and per-dish serving schedules, optional add-ons, translations, and Buy N Get M offers.
 - Customer profiles, online-order settings, delivery/pickup orders, payment state, reviews, and service-fee reporting.
 - Private UPI payment screenshots, limited to the submitting customer and that restaurant's owner/waiter accounts.
+- Staged online-order progress, customer cancellation, UPI refund tracking, and opt-in customer browser-push registrations.
+- Signed guest-session cancellation for pending QR/table orders.
 - Opt-in Android diagnostics with restricted access and a 30-day retention policy.
 
 Add database tests whenever introducing or changing security-sensitive tables, policies, functions, or RPC behavior.
@@ -93,7 +95,7 @@ npx supabase login
 npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 npx supabase functions deploy session-join session-state order-place service-request \
-  qr-sheet review-submit session-coupon online-restaurants online-menu
+  order-cancel qr-sheet review-submit session-coupon online-restaurants online-menu
 ```
 
 Deploy other functions only when their integrations/features are configured:
@@ -132,7 +134,7 @@ Never put these secrets or a Supabase service-role key in the Android app, PWA, 
 3. Configure `FCM_SERVICE_ACCOUNT_JSON` and `WEBHOOK_SECRET` as Supabase function secrets.
 4. Deploy `notify` and configure database webhooks for the relevant order/request tables with the `x-webhook-secret` header.
 
-The Android app builds without Firebase configuration; push delivery when the app is killed is optional. The customer PWA can also register browser FCM tokens in the existing `devices` table. To enable it, register a Firebase Web app in the same project, enable Firebase Cloud Messaging, create a Web Push certificate key, and configure the PWA `NEXT_PUBLIC_FIREBASE_*` settings described in [customer-pwa/README.md](../customer-pwa/README.md). Add the deployed HTTPS origin to Firebase's authorized domains. Owners then enable background alerts for each browser in restaurant settings. Web configuration and the VAPID public key are public client values; keep the Firebase service-account JSON server-side.
+The Android app builds without Firebase configuration; push delivery when the app is killed is optional. The customer PWA can register customer tokens in `customer_push_devices` and restaurant tokens in `devices`. To enable it, register a Firebase Web app in the same project, enable Firebase Cloud Messaging, create a Web Push certificate key, and configure the PWA `NEXT_PUBLIC_FIREBASE_*` settings described in [customer-pwa/README.md](../customer-pwa/README.md). Add the deployed HTTPS origin to Firebase's authorized domains. Owners enable background alerts for each browser in restaurant settings; customers enable their order updates from online order history. Configure an `online_orders` database webhook for both **INSERT** (restaurant notification) and **UPDATE** (customer status/payment/refund updates), with `x-webhook-secret` set to the `WEBHOOK_SECRET` function secret. Keep the Firebase service-account JSON server-side.
 
 ## Optional diagnostics
 

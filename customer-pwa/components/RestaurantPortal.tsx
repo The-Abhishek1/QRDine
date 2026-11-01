@@ -69,6 +69,10 @@ type OnlineOrder = {
   cod_fee: number;
   total: number;
   reject_reason: string | null;
+  refund_status: "not_required" | "required" | "refunded";
+  refund_reference: string | null;
+  refund_note: string | null;
+  refund_processed_at: string | null;
   eta_minutes: number | null;
   created_at: string;
 };
@@ -459,7 +463,7 @@ export default function RestaurantPortal() {
     }
   }
 
-  async function actOnOrder(order: OnlineOrder, action: "accept" | "reject" | "verify_payment" | "complete") {
+  async function actOnOrder(order: OnlineOrder, action: "accept" | "reject" | "verify_payment" | "preparing" | "ready" | "complete" | "mark_refunded" | "mark_no_refund") {
     setBusy(true);
     setError(null);
     try {
@@ -468,6 +472,16 @@ export default function RestaurantPortal() {
       if (action === "accept") args.p_eta_minutes = Number(etaMinutes[order.id] || "30");
       if (action === "reject") {
         const reason = window.prompt("Why are you rejecting this order?", "Unable to fulfil this order");
+        if (!reason?.trim()) return;
+        args.p_reason = reason.trim();
+      }
+      if (action === "mark_refunded") {
+        const reference = window.prompt("Enter the UPI refund transaction reference. Only do this after sending the refund outside QR Dine.");
+        if (!reference?.trim()) return;
+        args.p_reason = reference.trim();
+      }
+      if (action === "mark_no_refund") {
+        const reason = window.prompt("Explain why no UPI refund is due (for example, payment was never received).");
         if (!reason?.trim()) return;
         args.p_reason = reason.trim();
       }
@@ -812,6 +826,9 @@ export default function RestaurantPortal() {
                       <div className="portal-order-total"><span>Total</span><strong>{rupees(order.total)}</strong></div>
                       {order.payment_reference && <p className="portal-payment-reference">UPI reference: <strong>{order.payment_reference}</strong></p>}
                       {order.payment_screenshot_path && <PaymentProof path={order.payment_screenshot_path} />}
+                      {order.refund_status === "required" && <p className="portal-message error">Refund review required. QR Dine does not send money; verify the UPI transaction, refund it outside the app if appropriate, then record the refund reference below.</p>}
+                      {order.refund_status === "refunded" && <p className="portal-form-hint">Refund marked sent · {order.refund_reference}</p>}
+                      {order.refund_note && <p className="portal-form-hint">Refund review note · {order.refund_note}</p>}
                       {order.status === "pending" && (
                         <div className="portal-order-actions">
                           {order.payment_method === "upi" && order.payment_status === "verification_required" && <button className="portal-secondary" disabled={busy} onClick={() => void actOnOrder(order, "verify_payment")}>Verify UPI payment</button>}
@@ -821,7 +838,23 @@ export default function RestaurantPortal() {
                           <button className="portal-action-danger" disabled={busy} onClick={() => void actOnOrder(order, "reject")}>Reject</button>
                         </div>
                       )}
-                      {order.status === "accepted" && <div className="portal-order-actions"><span>{order.eta_minutes ? `Preparation estimate: ${order.eta_minutes} minutes` : "Accepted"}</span><button className="portal-action-primary" disabled={busy} onClick={() => void actOnOrder(order, "complete")}>Mark completed</button></div>}
+                      {order.status === "accepted" && <div className="portal-order-actions">
+                        <span>{order.eta_minutes ? `Preparation estimate: ${order.eta_minutes} minutes` : "Accepted"}</span>
+                        <button className="portal-action-primary" disabled={busy} onClick={() => void actOnOrder(order, "preparing")}>Start preparing</button>
+                        <button className="portal-secondary" disabled={busy} onClick={() => void actOnOrder(order, "ready")}>Mark ready</button>
+                      </div>}
+                      {order.status === "preparing" && <div className="portal-order-actions">
+                        <span>{order.eta_minutes ? `Preparation estimate: ${order.eta_minutes} minutes` : "Preparing"}</span>
+                        <button className="portal-action-primary" disabled={busy} onClick={() => void actOnOrder(order, "ready")}>Mark ready</button>
+                      </div>}
+                      {order.status === "ready" && <div className="portal-order-actions">
+                        <span>Ready for customer pickup or dispatch.</span>
+                        <button className="portal-action-primary" disabled={busy} onClick={() => void actOnOrder(order, "complete")}>Mark completed</button>
+                      </div>}
+                      {order.refund_status === "required" && <div className="portal-order-actions">
+                        <button className="portal-action-primary" disabled={busy} onClick={() => void actOnOrder(order, "mark_refunded")}>Record refund sent</button>
+                        <button className="portal-secondary" disabled={busy} onClick={() => void actOnOrder(order, "mark_no_refund")}>No refund due</button>
+                      </div>}
                     </article>
                   ))}
                 </div>

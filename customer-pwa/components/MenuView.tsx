@@ -126,7 +126,8 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
           <ul>
             {dishes.map((d) => {
               const simple = isSimple(d);
-              const orderable = d.is_available && (!onlineMode || d.online_available !== false) && c.open_now && (d.stock_left === null || d.stock_left > 0);
+              const dishOpen = d.open_now !== false;
+              const orderable = d.is_available && (!onlineMode || d.online_available !== false) && c.open_now && dishOpen && (d.stock_left === null || d.stock_left > 0);
               const qty = simple
                 ? (lines.find((l) => l.key === lineKey(d.id, null, [], ""))?.qty ?? 0)
                 : lines.filter((l) => l.dishId === d.id).reduce((n, l) => n + l.qty, 0);
@@ -142,12 +143,13 @@ export default function MenuView({ menu, lines, onQuickAdd, onQuickRemove, onCon
                     <div className="dish-tags">
                       {menu.bestsellers.includes(d.id) && <span className="tag tag-best">★ {t("bestseller")}</span>}
                       {d.stock_left !== null && d.stock_left > 0 && d.stock_left <= 5 && <span className="tag tag-low">{t("onlyLeft", { n: d.stock_left })}</span>}
+                      {d.avail_from && d.avail_to && <span className={`tag ${dishOpen ? "" : "tag-low"}`}>{dishOpen ? t("available") : t("notNow")} · {hm(d.avail_from)}–{hm(d.avail_to)}</span>}
                     </div>
                     {desc && <p className="dish-desc">{desc}</p>}
                   </div>
                   <div className="dish-side">
                     {d.image_url ? <img src={d.image_url} alt="" loading="lazy" width={96} height={96} referrerPolicy="no-referrer" /> : <div className="dish-noimg" />}
-                    {!orderable ? <span className="out-tag">{d.stock_left === 0 || !d.is_available ? t("soldOut") : onlineMode && d.online_available === false ? "Not available online" : t("notNow")}</span>
+                    {!orderable ? <span className="out-tag">{d.stock_left === 0 || !d.is_available ? t("soldOut") : onlineMode && d.online_available === false ? "Not available online" : !dishOpen || !c.open_now ? t("notNow") : t("soldOut")}</span>
                       : simple ? <Stepper qty={qty} onAdd={() => onQuickAdd(d.id)} onRemove={() => onQuickRemove(d.id)} name={pick(d.name, d.name_i18n)} canAddMore={qty < 50 && (d.stock_left === null || qty < d.stock_left)} />
                       : <>
                           <button className="btn-add" disabled={d.stock_left !== null && qty >= d.stock_left} onClick={() => onConfigure(d)}>{t("add")}</button>

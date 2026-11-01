@@ -50,6 +50,8 @@ export function rateLimit(key: string, max: number, windowMs: number): boolean {
 export function mapDbError(e: { message?: string }): HttpError {
   const m = e.message ?? "";
   if (m.startsWith("session_closed")) return new HttpError(409, "session_closed");
+  if (m.startsWith("order_not_pending")) return new HttpError(409, "order_not_pending");
+  if (m.startsWith("order_not_found")) return new HttpError(404, "order_not_found");
   if (m.startsWith("subscription_inactive")) return new HttpError(403, "subscription_inactive");
   if (m.startsWith("rate_limited")) return new HttpError(429, "rate_limited");
   if (m.startsWith("dish_unavailable")) return new HttpError(409, "dish_unavailable", m.split(":").slice(1).join(":"));
