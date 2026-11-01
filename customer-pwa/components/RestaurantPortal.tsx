@@ -62,6 +62,7 @@ type OnlineOrder = {
   delivery_address: string | null;
   postal_code: string | null;
   payment_reference: string | null;
+  payment_screenshot_path: string | null;
   items_snapshot: OnlineOrderItem[];
   subtotal: number;
   delivery_fee: number;
@@ -130,6 +131,34 @@ function Field({
       <span>{label}{required ? " *" : ""}</span>
       <input type={type} value={value} onChange={(event) => onChange(event.target.value)} required={required} />
     </label>
+  );
+}
+
+function PaymentProof({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setUrl(null);
+    setError(false);
+    customerSupabase().storage.from("payment-proofs").createSignedUrl(path, 600).then(({ data, error: signedUrlError }) => {
+      if (signedUrlError) throw signedUrlError;
+      if (!data?.signedUrl) throw new Error("No signed URL returned");
+      if (active) setUrl(data.signedUrl);
+    }).catch(() => {
+      if (active) setError(true);
+    });
+    return () => { active = false; };
+  }, [path]);
+
+  if (error) return <p className="portal-payment-proof-error">Could not load the payment screenshot. Refresh the orders list and try again.</p>;
+  if (!url) return <p className="portal-payment-proof-error">Loading payment screenshot…</p>;
+  return (
+    <a className="portal-payment-proof" href={url} target="_blank" rel="noreferrer">
+      <img src={url} alt="Customer UPI payment screenshot" />
+      <span>View payment screenshot</span>
+    </a>
   );
 }
 
@@ -723,6 +752,7 @@ export default function RestaurantPortal() {
                       </div>
                       <div className="portal-order-total"><span>Total</span><strong>{rupees(order.total)}</strong></div>
                       {order.payment_reference && <p className="portal-payment-reference">UPI reference: <strong>{order.payment_reference}</strong></p>}
+                      {order.payment_screenshot_path && <PaymentProof path={order.payment_screenshot_path} />}
                       {order.status === "pending" && (
                         <div className="portal-order-actions">
                           {order.payment_method === "upi" && order.payment_status === "verification_required" && <button className="portal-secondary" disabled={busy} onClick={() => void actOnOrder(order, "verify_payment")}>Verify UPI payment</button>}

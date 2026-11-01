@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,9 +35,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.xcloak.qrdine.Diagnostics
 import com.xcloak.qrdine.QrDineApp
 import com.xcloak.qrdine.data.OnlineOrder
@@ -115,6 +118,18 @@ fun OnlineOrdersScreen(bottomBar: @Composable () -> Unit = {}) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(orders, key = { it.id }) { order ->
+                    var proofUrl by remember(order.paymentScreenshotPath) { mutableStateOf<String?>(null) }
+                    var proofLoadFailed by remember(order.paymentScreenshotPath) { mutableStateOf(false) }
+                    LaunchedEffect(order.paymentScreenshotPath) {
+                        order.paymentScreenshotPath?.let { path ->
+                            try {
+                                proofUrl = QrDineApp.container.onlineOrders.paymentScreenshotUrl(path)
+                            } catch (e: Exception) {
+                                Diagnostics.record(QrDineApp.appContext, e, "online-payment-proof")
+                                proofLoadFailed = true
+                            }
+                        }
+                    }
                     Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -139,6 +154,18 @@ fun OnlineOrdersScreen(bottomBar: @Composable () -> Unit = {}) {
                                 fontWeight = FontWeight.Bold,
                             )
                             order.paymentReference?.let { Text("UPI reference: $it", style = MaterialTheme.typography.bodySmall) }
+                            if (order.paymentScreenshotPath != null) {
+                                when {
+                                    proofUrl != null -> AsyncImage(
+                                        model = proofUrl,
+                                        contentDescription = "Customer UPI payment screenshot",
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                                    )
+                                    proofLoadFailed -> Text("Could not load the payment screenshot. Refresh orders and try again.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                    else -> Text("Loading payment screenshot…", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
                             if (order.rejectReason != null) Text("Reason: ${order.rejectReason}", color = MaterialTheme.colorScheme.error)
                             if (order.status == "pending") {
                                 if (order.paymentMethod == "upi" && order.paymentStatus == "verification_required") {

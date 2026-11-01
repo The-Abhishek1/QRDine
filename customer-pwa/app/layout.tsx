@@ -5,6 +5,7 @@ import "@fontsource/hind/600.css";
 import "@fontsource/hind/700.css";
 import "./globals.css";
 import RegisterSW from "@/components/RegisterSW";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export const metadata: Metadata = {
   title: "QR Dine | Good food, no waiting",
@@ -12,13 +13,17 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
   robots: { index: false, follow: false },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#091b15" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#F5FAFE" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem("qrdine:theme");document.documentElement.dataset.theme=t==="dark"?"dark":"light"}catch(e){document.documentElement.dataset.theme="light"}` }} />
+      </head>
       <body>
         {children}
+        <ThemeToggle />
         <footer className="site-legal-footer">
           <a href="/privacy">Privacy policy</a>
           <a href="/terms">Terms of use</a>

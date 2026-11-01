@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="26 October 2026">
+    <LegalPage title="Privacy Policy" updated="1 November 2026">
       <p>
         This policy explains how QR Dine handles information when guests use a restaurant&apos;s QR ordering page
         or restaurant teams use the QR Dine administration app. The service is operated as <strong>QR Dine</strong>
@@ -23,6 +23,12 @@ export default function PrivacyPage() {
           <strong>Guest orders:</strong> the table or session, selected items and options, quantities, notes,
           order and bill status, and any review rating or comment you choose to submit. The guest ordering flow
           does not ask you to create an account or provide your name, email address, or phone number.
+        </li>
+        <li>
+          <strong>Online customer orders and UPI proof:</strong> customer account and delivery details, order
+          selections, UPI transaction references, and payment screenshots uploaded when submitting a UPI
+          reference. Payment screenshots are kept in private storage and made available to the customer and
+          restaurant staff responsible for verifying that order.
         </li>
         <li>
           <strong>Restaurant accounts:</strong> account email and authentication data, restaurant and staff
@@ -57,9 +63,10 @@ export default function PrivacyPage() {
         backend services; providers process data on QR Dine&apos;s behalf under their own terms and privacy notices.
       </p>
       <p>
-        QR Dine does not sell personal information or use it for targeted advertising. Payment details are not
-        entered into the guest ordering page. If you pay using a restaurant&apos;s UPI option, the payment is
-        handled by the payment app or provider you choose and is subject to its privacy terms.
+        QR Dine does not sell personal information or use it for targeted advertising. If you pay using a
+        restaurant&apos;s UPI option, the transfer is handled by the payment app or provider you choose and is
+        subject to its privacy terms. QR Dine does not process or hold the funds; customers may submit a UPI
+        reference and screenshot so the restaurant can verify the transfer.
       </p>
 
       <h2>Retention and your choices</h2>

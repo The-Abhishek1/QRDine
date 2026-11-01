@@ -42,6 +42,7 @@ data class OnlineOrder(
     @SerialName("delivery_address") val deliveryAddress: String? = null,
     @SerialName("postal_code") val postalCode: String? = null,
     @SerialName("payment_reference") val paymentReference: String? = null,
+    @SerialName("payment_screenshot_path") val paymentScreenshotPath: String? = null,
     @SerialName("items_snapshot") val items: List<OnlineOrderItem> = emptyList(),
     val subtotal: Int,
     @SerialName("offer_discount") val offerDiscount: Int = 0,

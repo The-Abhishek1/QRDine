@@ -1,5 +1,5 @@
 begin;
-select plan(15);
+select plan(17);
 
 insert into auth.users (id, email) values
   ('99999999-0000-0000-0000-0000000000e1', 'online-platform@test.dev'),
@@ -84,6 +84,10 @@ select lives_ok($$select public.platform_set_online_cod(false)$$, 'platform admi
 select is((select online_orders_enabled and online_upi_enabled and not online_cod_enabled
   from public.restaurants where id = 'aaaaaaaa-0000-0000-0000-0000000000e2'),
   true, 'disabling COD preserves UPI orders and disables restaurant COD');
+select is((select public from storage.buckets where id = 'payment-proofs'),
+  false, 'UPI payment screenshots use private storage');
+select is(to_regprocedure('public.submit_online_payment_reference(uuid,text,text)') is not null,
+  true, 'UPI reference submission requires a screenshot path');
 
 select * from finish();
 rollback;

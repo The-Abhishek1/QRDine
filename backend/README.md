@@ -46,6 +46,7 @@ The migrations build the system in chronological order and cover:
 - Platform administration, restaurant approval and holds, subscriptions, payment records, staff permissions, and audit history.
 - Menu variants, stock, availability schedules, optional add-ons, translations, and Buy N Get M offers.
 - Customer profiles, online-order settings, delivery/pickup orders, payment state, reviews, and service-fee reporting.
+- Private UPI payment screenshots, limited to the submitting customer and that restaurant's owner/waiter accounts.
 - Opt-in Android diagnostics with restricted access and a 30-day retention policy.
 
 Add database tests whenever introducing or changing security-sensitive tables, policies, functions, or RPC behavior.
@@ -75,11 +76,13 @@ Guest-token functions are configured with `verify_jwt = false` because they vali
 Customer authentication uses Supabase Auth metadata and the custom access-token hook:
 
 1. Enable the custom access-token hook in Supabase Auth, pointing to `public.custom_access_token_hook`.
-2. Apply the customer-account and online-ordering migrations.
+2. Apply the customer-account, online-ordering, and online-payment-proof migrations.
 3. Create customer accounts with `account_type=customer` metadata.
 4. Have customers sign out and back in after enabling or changing the hook so a new token contains `app_role=customer`.
 
 The public anon key alone does not grant customer permissions. Customer RPCs check the authenticated customer role and RLS. Do not assign customer roles based only on client-supplied request fields.
+
+UPI customers must upload a JPEG, PNG, or WebP payment screenshot (up to 5 MB) with the transaction reference. The `payment-proofs` Storage bucket is private; access is controlled by order-linked Storage policies and restaurant clients use short-lived signed URLs. Deploy the migration before updating clients.
 
 ## Hosted deployment
 

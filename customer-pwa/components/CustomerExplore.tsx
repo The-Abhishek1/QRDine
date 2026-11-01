@@ -35,6 +35,7 @@ type OnlineOrder = {
   payment_method: string;
   payment_status: string;
   payment_reference: string | null;
+  payment_screenshot_path: string | null;
   subtotal: number;
   delivery_fee: number;
   cod_fee: number;
@@ -99,6 +100,7 @@ export default function CustomerExplore() {
   const [orderBusy, setOrderBusy] = useState(false);
   const clientOrderKeys = useRef(new Map<string, string>());
   const [paymentReference, setPaymentReference] = useState("");
+  const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [configuring, setConfiguring] = useState<Dish | null>(null);
@@ -113,6 +115,11 @@ export default function CustomerExplore() {
   const [customerRoleReady, setCustomerRoleReady] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPaymentReference("");
+    setPaymentScreenshot(null);
+  }, [activeOrder?.id]);
 
   useEffect(() => {
     let active = true;
@@ -488,6 +495,7 @@ export default function CustomerExplore() {
         payment_method: paymentMethod,
         payment_status: paymentMethod === "upi" ? "awaiting_payment" : "cod_due",
         payment_reference: null,
+        payment_screenshot_path: null,
         subtotal,
         delivery_fee: fulfilment === "delivery" ? selectedRestaurant.online_delivery_fee : 0,
         cod_fee: paymentMethod === "cod" ? selectedRestaurant.online_cod_fee : 0,
@@ -543,16 +551,37 @@ export default function CustomerExplore() {
       setError("Customer ordering permissions are not enabled. The Supabase admin must enable the customer access-token hook, then you must sign in again.");
       return;
     }
+    if (!paymentScreenshot) {
+      setError("Upload your UPI payment screenshot before submitting the reference.");
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(paymentScreenshot.type) || paymentScreenshot.size > 5 * 1024 * 1024) {
+      setError("Choose a JPEG, PNG, or WebP screenshot up to 5 MB.");
+      return;
+    }
     setOrderBusy(true);
     setError(null);
     try {
+      const extension = paymentScreenshot.type === "image/jpeg" ? "jpg" : paymentScreenshot.type === "image/png" ? "png" : "webp";
+      const screenshotPath = `${activeOrder.id}/${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await customerSupabase().storage
+        .from("payment-proofs")
+        .upload(screenshotPath, paymentScreenshot, { contentType: paymentScreenshot.type, upsert: false });
+      if (uploadError) throw uploadError;
       const { error: paymentError } = await customerSupabase().rpc("submit_online_payment_reference", {
         p_order_id: activeOrder.id,
         p_reference: paymentReference.trim(),
+        p_screenshot_path: screenshotPath,
       });
       if (paymentError) throw paymentError;
-      setActiveOrder({ ...activeOrder, payment_status: "verification_required", payment_reference: paymentReference.trim() });
+      setActiveOrder({
+        ...activeOrder,
+        payment_status: "verification_required",
+        payment_reference: paymentReference.trim(),
+        payment_screenshot_path: screenshotPath,
+      });
       setPaymentReference("");
+      setPaymentScreenshot(null);
       setMessage("Payment reference sent. The restaurant must verify the transfer before accepting your order.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not submit the payment reference.");
@@ -733,9 +762,21 @@ export default function CustomerExplore() {
                       )}
                       <form onSubmit={submitPaymentReference}>
                         <label>UPI transaction reference<input required minLength={6} maxLength={100} value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} /></label>
-                        <button className="btn-outline" disabled={orderBusy}>{activeOrder.payment_status === "awaiting_payment" ? "Submit reference for verification" : "Update payment reference"}</button>
+                        <label>Payment screenshot<input key={`${activeOrder.id}-${activeOrder.payment_screenshot_path ?? ""}`} type="file" accept="image/jpeg,image/png,image/webp" required onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          if (file && (file.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type))) {
+                            setPaymentScreenshot(null);
+                            event.target.value = "";
+                            setError("Choose a JPEG, PNG, or WebP screenshot up to 5 MB.");
+                          } else {
+                            setPaymentScreenshot(file);
+                            setError(null);
+                          }
+                        }} /></label>
+                        {paymentScreenshot && <small>Selected: {paymentScreenshot.name}</small>}
+                        <button className="btn-outline" disabled={orderBusy || !paymentScreenshot || paymentReference.trim().length < 6}>{activeOrder.payment_status === "awaiting_payment" ? "Submit reference for verification" : "Update payment reference and screenshot"}</button>
                       </form>
-                      <small>The restaurant verifies UPI before accepting the order.</small>
+                      <small>A payment screenshot and reference are required. The restaurant verifies UPI before accepting the order.</small>
                     </section>
                   )}
                   {activeOrder && (

@@ -2,6 +2,9 @@ package com.xcloak.qrdine.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,7 +73,10 @@ import com.xcloak.qrdine.data.OnlineOrder
 import com.xcloak.qrdine.data.OnlineOrderInputItem
 import com.xcloak.qrdine.data.OnlineOffer
 import com.xcloak.qrdine.data.OnlineVariant
+import com.xcloak.qrdine.data.ImageUtil
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +95,16 @@ fun CustomerAppScreen() {
     var checkoutOpen by remember { mutableStateOf(false) }
     var activeOrder by remember { mutableStateOf<OnlineOrder?>(null) }
     var paymentReference by remember { mutableStateOf("") }
+    var paymentProofUri by remember { mutableStateOf<Uri?>(null) }
+    var paymentProofOrderId by remember { mutableStateOf<String?>(null) }
+    val paymentProofPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            paymentProofUri = uri
+            paymentProofOrderId = activeOrder?.id
+        }
+    }
     var clientOrderKeys by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var orderBusy by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -101,6 +117,7 @@ fun CustomerAppScreen() {
     var menuQuery by rememberSaveable { mutableStateOf("") }
     var menuCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
     val customerRoleReady = remember { QrDineApp.container.auth.customerRoleConfigured() }
 
     fun loadRestaurants() {
@@ -127,6 +144,7 @@ fun CustomerAppScreen() {
         menuCategoryId = null
         menuLoading = true
         error = null
+        notice = null
         scope.launch {
             try {
                 val response = QrDineApp.container.customer.menu(restaurant.id)
@@ -186,6 +204,7 @@ fun CustomerAppScreen() {
         scope.launch {
             orderBusy = true
             error = null
+            notice = null
             try {
                 val clientKey = clientOrderKeys[restaurant.id] ?: java.util.UUID.randomUUID().toString()
                 clientOrderKeys = clientOrderKeys + (restaurant.id to clientKey)
@@ -222,7 +241,11 @@ fun CustomerAppScreen() {
                 cart = emptyList()
                 checkoutOpen = false
                 customerOrders = listOf(createdOrder) + customerOrders.filterNot { it.id == createdOrder.id }
-                if (payment == "upi") error = "Order placed. Pay by UPI and submit the payment reference for restaurant verification."
+                notice = if (payment == "upi") {
+                    "Order placed. Pay by UPI and submit the payment reference for restaurant verification."
+                } else {
+                    "Order placed. The restaurant will confirm it shortly."
+                }
                 try {
                     customerOrders = QrDineApp.container.customer.orders()
                     activeOrder = customerOrders.firstOrNull { it.id == result.orderId } ?: createdOrder
@@ -292,6 +315,7 @@ fun CustomerAppScreen() {
                             menu = null
                             cart = emptyList()
                             error = null
+                            notice = null
                         }) { Text("←", style = MaterialTheme.typography.titleLarge) }
                     }
                 },
@@ -331,6 +355,21 @@ fun CustomerAppScreen() {
                     onRefresh = { refreshRestaurantMenu(restaurant) },
                     refreshing = menuLoading,
                 )
+                notice?.let {
+                    Card(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        ),
+                    ) {
+                        Text(
+                            it,
+                            Modifier.padding(12.dp),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -352,11 +391,19 @@ fun CustomerAppScreen() {
                 }
                 when {
                     menuLoading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
-                    error != null -> {
+                    error != null && menu == null -> {
                         Text(error!!, color = MaterialTheme.colorScheme.error)
                         Button(onClick = { openRestaurant(restaurant) }) { Text("Try again") }
                     }
                     menu != null -> {
+                        error?.let {
+                            Text(
+                                it,
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                         menu!!.announcement?.let {
                             Card(Modifier.fillMaxWidth()) { Text(it, Modifier.padding(12.dp)) }
                         }
@@ -507,39 +554,66 @@ fun CustomerAppScreen() {
                                     }
                                 }
                             }
-                        }
-                        if (cartCount > 0) {
-                            HorizontalDivider()
-                            Text("$cartCount items · ${subtotal.rupees()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            cart.forEach { line ->
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("${line.qty} × ${line.name} · ${line.unitPrice.rupees()}", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                                    TextButton(onClick = {
-                                        cart = cart.flatMap { item ->
-                                            if (item.key != line.key) listOf(item)
-                                            else if (item.qty <= 1) emptyList() else listOf(item.copy(qty = item.qty - 1))
+                        if (cartCount > 0) item(key = "guest-cart") {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                            ) {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Text(
+                                        "$cartCount items · ${subtotal.rupees()}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    HorizontalDivider()
+                                    cart.forEachIndexed { index, line ->
+                                        Row(
+                                            Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                "${line.qty} × ${line.name} · ${line.unitPrice.rupees()}",
+                                                Modifier.weight(1f),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                TextButton(onClick = {
+                                                    cart = cart.flatMap { item ->
+                                                        if (item.key != line.key) listOf(item)
+                                                        else if (item.qty <= 1) emptyList() else listOf(item.copy(qty = item.qty - 1))
+                                                    }
+                                                }) { Text("−") }
+                                                TextButton(onClick = {
+                                                    val dish = onlineMenu.dishes.firstOrNull { it.id == line.dishId }
+                                                    val totalForDish = cart.filter { it.dishId == line.dishId }.sumOf { it.qty }
+                                                    if (totalForDish < (dish?.stockLeft ?: 50) && line.qty < 50) {
+                                                        cart = cart.map { item -> if (item.key == line.key) item.copy(qty = item.qty + 1) else item }
+                                                    }
+                                                }) { Text("+") }
+                                            }
                                         }
-                                    }) { Text("−") }
-                                    TextButton(onClick = {
-                                        val dish = onlineMenu.dishes.firstOrNull { it.id == line.dishId }
-                                        val totalForDish = cart.filter { it.dishId == line.dishId }.sumOf { it.qty }
-                                        if (totalForDish < (dish?.stockLeft ?: 50) && line.qty < 50) {
-                                            cart = cart.map { item -> if (item.key == line.key) item.copy(qty = item.qty + 1) else item }
+                                        if (index < cart.lastIndex) {
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                                         }
-                                    }) { Text("+") }
+                                    }
+                                    Text(
+                                        "Online order total includes the fees shown at checkout.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Button(
+                                        onClick = { checkoutOpen = true },
+                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                        enabled = !orderBusy && customerRoleReady,
+                                    ) { Text("Continue to checkout") }
                                 }
                             }
-                            Text(
-                                "Online order total includes the fees shown at checkout.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Button(
-                                onClick = { checkoutOpen = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !orderBusy && customerRoleReady,
-                            ) { Text("Continue to checkout") }
                         }
+                        item(key = "active-order") {
                         activeOrder?.let { order ->
                             GlassCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -621,38 +695,73 @@ fun CustomerAppScreen() {
                                                 singleLine = true,
                                                 modifier = Modifier.fillMaxWidth(),
                                             )
+                                            val selectedProof = paymentProofUri.takeIf { paymentProofOrderId == order.id }
+                                            OutlinedButton(
+                                                onClick = {
+                                                    paymentProofPicker.launch(
+                                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                                    )
+                                                },
+                                                enabled = !orderBusy,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                Text(if (selectedProof == null) "Upload payment screenshot *" else "Change payment screenshot")
+                                            }
+                                            if (selectedProof != null) {
+                                                AsyncImage(
+                                                    model = selectedProof,
+                                                    contentDescription = "Selected UPI payment screenshot",
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(14.dp)),
+                                                )
+                                                Text("Screenshot selected", style = MaterialTheme.typography.bodySmall)
+                                            } else if (order.paymentScreenshotPath != null) {
+                                                Text("A screenshot was submitted. Select a new one to update the payment reference.", style = MaterialTheme.typography.bodySmall)
+                                            }
                                             Button(
                                                 onClick = {
-                                                    scope.launch {
-                                                        orderBusy = true
-                                                        try {
-                                                            QrDineApp.container.customer.submitPaymentReference(order.id, paymentReference)
-                                                            val updated = order.copy(
-                                                                paymentStatus = "verification_required",
-                                                                paymentReference = paymentReference.trim(),
-                                                            )
-                                                            customerOrders = customerOrders.map { if (it.id == order.id) updated else it }
-                                                            activeOrder = updated
-                                                            paymentReference = ""
+                                                    if (selectedProof == null) {
+                                                        error = "Upload your UPI payment screenshot before submitting the reference."
+                                                    } else {
+                                                        scope.launch {
+                                                            orderBusy = true
                                                             try {
-                                                                customerOrders = QrDineApp.container.customer.orders()
-                                                                activeOrder = customerOrders.firstOrNull { it.id == order.id } ?: updated
+                                                                val imageBytes = withContext(Dispatchers.IO) {
+                                                                    ImageUtil.compress(context, selectedProof)
+                                                                }
+                                                                val screenshotPath = QrDineApp.container.customer.uploadPaymentScreenshot(order.id, imageBytes)
+                                                                QrDineApp.container.customer.submitPaymentReference(order.id, paymentReference, screenshotPath)
+                                                                val updated = order.copy(
+                                                                    paymentStatus = "verification_required",
+                                                                    paymentReference = paymentReference.trim(),
+                                                                    paymentScreenshotPath = screenshotPath,
+                                                                )
+                                                                customerOrders = customerOrders.map { if (it.id == order.id) updated else it }
+                                                                activeOrder = updated
+                                                                paymentReference = ""
+                                                                paymentProofUri = null
+                                                                paymentProofOrderId = null
+                                                                try {
+                                                                    customerOrders = QrDineApp.container.customer.orders()
+                                                                    activeOrder = customerOrders.firstOrNull { it.id == order.id } ?: updated
+                                                                } catch (e: Exception) {
+                                                                    Diagnostics.record(QrDineApp.appContext, e, "customer-orders-refresh")
+                                                                    error = "Reference sent, but the latest order status could not be refreshed."
+                                                                }
                                                             } catch (e: Exception) {
-                                                                Diagnostics.record(QrDineApp.appContext, e, "customer-orders-refresh")
-                                                                error = "Reference sent, but the latest order status could not be refreshed."
+                                                                Diagnostics.record(QrDineApp.appContext, e, "customer-payment-reference")
+                                                                error = "Could not upload the screenshot or submit the payment reference. Please try again."
+                                                            } finally {
+                                                                orderBusy = false
                                                             }
-                                                        } catch (e: Exception) {
-                                                            Diagnostics.record(QrDineApp.appContext, e, "customer-payment-reference")
-                                                            error = "Could not submit the payment reference. Please try again."
-                                                        } finally {
-                                                            orderBusy = false
                                                         }
                                                     }
                                                 },
-                                                enabled = paymentReference.trim().length >= 6 && !orderBusy,
-                                            ) { Text(if (order.paymentStatus == "awaiting_payment") "Submit payment reference" else "Update payment reference") }
+                                                enabled = paymentReference.trim().length >= 6 && selectedProof != null && !orderBusy,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) { Text(if (order.paymentStatus == "awaiting_payment") "Submit payment reference" else "Update reference and screenshot") }
                                             Text(
-                                                "The restaurant verifies your UPI transfer before accepting the order.",
+                                                "A payment screenshot and reference are required. The restaurant verifies your UPI transfer before accepting the order.",
                                                 style = MaterialTheme.typography.bodySmall,
                                             )
                                         }
@@ -660,7 +769,8 @@ fun CustomerAppScreen() {
                                 }
                             }
                         }
-                        if (customerOrders.isNotEmpty()) {
+                        }
+                        if (customerOrders.isNotEmpty()) item(key = "recent-orders") {
                             Column(
                                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -698,6 +808,7 @@ fun CustomerAppScreen() {
                             }
                         }
                     }
+                }
                 }
             } else when (selectedTab) {
                 0, 1 -> {

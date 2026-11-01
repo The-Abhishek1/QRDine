@@ -44,14 +44,14 @@ enum class AppThemeMode(val label: String) {
     SYSTEM("System"), LIGHT("Light"), DARK("Dark");
 
     companion object {
-        fun fromStored(value: String?): AppThemeMode = entries.firstOrNull { it.name == value } ?: DARK
+        fun fromStored(value: String?): AppThemeMode = entries.firstOrNull { it.name == value } ?: LIGHT
     }
 }
 
 object AppThemePreference {
     private const val PREFS = "qrdine_preferences"
     private const val MODE_KEY = "theme_mode"
-    private val _mode = MutableStateFlow(AppThemeMode.DARK)
+    private val _mode = MutableStateFlow(AppThemeMode.LIGHT)
     val mode: StateFlow<AppThemeMode> = _mode.asStateFlow()
 
     fun initialize(context: Context) {
@@ -67,38 +67,38 @@ object AppThemePreference {
 }
 
 private val Light = lightColorScheme(
-    primary = Color(0xFF006B59), onPrimary = Color.White,
-    primaryContainer = Color(0xFFB5F1DF), onPrimaryContainer = Color(0xFF002019),
-    secondary = Color(0xFF4C655D), onSecondary = Color.White,
-    secondaryContainer = Color(0xFFD7E9E1), onSecondaryContainer = Color(0xFF10261F),
-    tertiary = Color(0xFF8A5B00), onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFFFDEA0), onTertiaryContainer = Color(0xFF2A1B00),
-    background = Color(0xFFF1F7F3), surface = Color(0xFFEAF3ED),
-    surfaceVariant = Color(0xFFDCE9E2), onSurfaceVariant = Color(0xFF40574E),
-    surfaceContainerLowest = Color(0xFFF1F7F3),
-    surfaceContainerLow = Color(0xFFEAF3ED),
-    surfaceContainer = Color(0xFFE3EEE7),
-    surfaceContainerHigh = Color(0xFFDDE9E2),
-    surfaceContainerHighest = Color(0xFFD5E3DA),
-    outline = Color(0xFF70877C), outlineVariant = Color(0xFFBDCEC4),
+    primary = Color(0xFF0369A1), onPrimary = Color.White,
+    primaryContainer = Color(0xFFBAE6FD), onPrimaryContainer = Color(0xFF082F49),
+    secondary = Color(0xFF4C6475), onSecondary = Color.White,
+    secondaryContainer = Color(0xFFDCEEF8), onSecondaryContainer = Color(0xFF102B3B),
+    tertiary = Color(0xFF0284C7), onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFCDEBFA), onTertiaryContainer = Color(0xFF0C344A),
+    background = Color(0xFFF5FAFE), surface = Color(0xFFEAF4FA),
+    surfaceVariant = Color(0xFFDDECF5), onSurfaceVariant = Color(0xFF405968),
+    surfaceContainerLowest = Color(0xFFF0F8FC),
+    surfaceContainerLow = Color(0xFFE4F1F8),
+    surfaceContainer = Color(0xFFDCECF5),
+    surfaceContainerHigh = Color(0xFFD4E7F2),
+    surfaceContainerHighest = Color(0xFFC9E0EE),
+    outline = Color(0xFF718B9B), outlineVariant = Color(0xFFBCCFDA),
     error = Color(0xFFBA1A1A), errorContainer = Color(0xFFFFDAD6), onErrorContainer = Color(0xFF410002),
 )
 
 private val Dark = darkColorScheme(
-    primary = Color(0xFF64DCC0), onPrimary = Color(0xFF00382E),
-    primaryContainer = Color(0xFF005144), onPrimaryContainer = Color(0xFFB9F4E3),
-    secondary = Color(0xFFB2CDC2), onSecondary = Color(0xFF1D352D),
-    secondaryContainer = Color(0xFF354E45), onSecondaryContainer = Color(0xFFD0E8DD),
-    tertiary = Color(0xFFF2C56D), onTertiary = Color(0xFF422C00),
-    tertiaryContainer = Color(0xFF5E430A), onTertiaryContainer = Color(0xFFFFDEA0),
-    background = Color(0xFF071B16), surface = Color(0xFF0B211B),
-    surfaceVariant = Color(0xFF243B33), onSurfaceVariant = Color(0xFFBDCEC5),
-    surfaceContainerLowest = Color(0xFF061611),
-    surfaceContainerLow = Color(0xFF102820),
-    surfaceContainer = Color(0xFF143129),
-    surfaceContainerHigh = Color(0xFF193A30),
-    surfaceContainerHighest = Color(0xFF22483B),
-    outline = Color(0xFF82988D), outlineVariant = Color(0xFF3A564A),
+    primary = Color(0xFF7DD3FC), onPrimary = Color(0xFF082F49),
+    primaryContainer = Color(0xFF075985), onPrimaryContainer = Color(0xFFE0F2FE),
+    secondary = Color(0xFFB3CCDC), onSecondary = Color(0xFF1B3445),
+    secondaryContainer = Color(0xFF304B5E), onSecondaryContainer = Color(0xFFD3EAF7),
+    tertiary = Color(0xFFBAE6FD), onTertiary = Color(0xFF082F49),
+    tertiaryContainer = Color(0xFF164C6B), onTertiaryContainer = Color(0xFFCDEBFA),
+    background = Color(0xFF071A2B), surface = Color(0xFF0B2235),
+    surfaceVariant = Color(0xFF243F53), onSurfaceVariant = Color(0xFFB9CEDB),
+    surfaceContainerLowest = Color(0xFF061522),
+    surfaceContainerLow = Color(0xFF10283A),
+    surfaceContainer = Color(0xFF153044),
+    surfaceContainerHigh = Color(0xFF1B394F),
+    surfaceContainerHighest = Color(0xFF25485F),
+    outline = Color(0xFF89A7B9), outlineVariant = Color(0xFF3A586D),
     error = Color(0xFFFFB4AB), errorContainer = Color(0xFF93000A), onErrorContainer = Color(0xFFFFDAD6),
 )
 

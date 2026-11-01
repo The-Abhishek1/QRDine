@@ -8,6 +8,8 @@ The QR Dine PWA is a Next.js application for customer ordering and a restaurant-
 
 The restaurant workspace is responsive for desktop and mobile browsers. It complements the Android app with browser-based order, menu, table, settings, and reporting workflows. Browser push alerts can use the same Firebase Cloud Messaging project as Android; device-specific Bluetooth thermal printer support depends on browser and printer compatibility.
 
+The website uses a shared light/dark theme toggle across the home page, online ordering, table QR ordering, and restaurant workspace. The selection is saved in browser local storage and defaults to light mode. Shared semantic color tokens in `app/globals.css` keep both themes aligned; Android uses the matching Material palette and retains its Appearance setting.
+
 ## Requirements
 
 - Node.js and npm
@@ -75,6 +77,8 @@ Customers register/sign in with a customer account, complete their delivery prof
 After enabling the Auth hook, customers should sign out and back in so their access token contains `app_role=customer`. Adding the key to a hosting provider alone does not enable customer permissions.
 
 UPI payment handoff does not verify payment. The restaurant must check the transfer and confirm it using the configured order workflow. COD is subject to platform and restaurant settings.
+
+Customers submitting a UPI reference must also upload a JPEG, PNG, or WebP payment screenshot (up to 5 MB). Proofs are stored in the private `payment-proofs` Supabase Storage bucket; the customer and restaurant staff can access the submitted image through short-lived signed links. Apply the `20261101000001_online_payment_proofs.sql` migration before enabling this flow.
 
 ### Restaurant workspace
 

@@ -61,7 +61,7 @@ Platform administrator accounts are provisioned by an administrator in Supabase;
 
 The customer area includes restaurant discovery and search, online menus with categories and dish options, centered restaurant imagery, cart and checkout, delivery/pickup order details, order history, feedback, and profile settings. Light, dark, and system appearance choices are persisted on the device.
 
-Customer checkout requires the customer account migration, online-order settings/order migrations, deployed `online-restaurants` and `online-menu` functions, and the Supabase Auth custom access-token hook. A public anon key alone does not enable customer permissions.
+Customer checkout requires the customer account migration, online-order settings/order migrations, the online payment-proof migration, deployed `online-restaurants` and `online-menu` functions, and the Supabase Auth custom access-token hook. UPI reference submission requires a payment screenshot; proofs are stored in the private `payment-proofs` bucket and can be viewed by the customer and restaurant staff.
 
 ## Restaurant operations
 

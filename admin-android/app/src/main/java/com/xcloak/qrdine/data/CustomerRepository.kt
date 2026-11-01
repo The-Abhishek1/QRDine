@@ -3,6 +3,8 @@ package com.xcloak.qrdine.data
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.storage.storage
+import io.ktor.http.ContentType
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -11,6 +13,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.util.UUID
 
 @Serializable
 private data class OnlineRestaurantResponse(val restaurants: List<OnlineRestaurant>)
@@ -63,10 +66,19 @@ class CustomerRepository(private val sb: SupabaseClient) {
         put("p_items", json.encodeToJsonElement(ListSerializer(OnlineOrderInputItem.serializer()), items))
     }).decodeAs<OnlineOrderCreated>()
 
-    suspend fun submitPaymentReference(orderId: String, reference: String) {
+    suspend fun uploadPaymentScreenshot(orderId: String, bytes: ByteArray): String {
+        val path = "$orderId/${UUID.randomUUID()}.jpg"
+        sb.storage.from("payment-proofs").upload(path, bytes) {
+            contentType = ContentType.Image.JPEG
+        }
+        return path
+    }
+
+    suspend fun submitPaymentReference(orderId: String, reference: String, screenshotPath: String) {
         sb.postgrest.rpc("submit_online_payment_reference", buildJsonObject {
             put("p_order_id", orderId)
             put("p_reference", reference.trim())
+            put("p_screenshot_path", screenshotPath)
         })
     }
 
