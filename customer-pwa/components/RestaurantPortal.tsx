@@ -256,7 +256,11 @@ export default function RestaurantPortal() {
     seenOnlineOrderIds.current = pendingOnlineIds;
     setRestaurant(row);
     setPortalRole(role);
-    setTab(role === "kitchen" ? "kitchen" : role === "waiter" ? "qr-orders" : (tab === "kitchen" ? "qr-orders" : tab));
+    setTab((currentTab) => {
+      if (role === "kitchen") return "kitchen";
+      if (currentTab === "kitchen") return "qr-orders";
+      return currentTab;
+    });
     setHotelStatus(null);
     setOrders(onlineRows);
     const serviceFee = Number(serviceFeeResult.data ?? 0);
