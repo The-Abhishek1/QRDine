@@ -33,6 +33,14 @@ const LANGUAGES: Record<string, string> = { hi: "Hindi", kn: "Kannada", ta: "Tam
 
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : "The request failed. Please try again."; }
 
+function requestMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  return "Unknown Supabase request error";
+}
+
 function toPaise(value: string): number | null {
   if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(value.trim())) return null;
   const amount = Number(value);
@@ -188,9 +196,25 @@ export default function RestaurantMenuManager({
       supabase.from("dish_addon_groups").select("dish_id,group_id").eq("restaurant_id", restaurantId),
       supabase.from("offers").select("id,name,buy_qty,get_qty,buy_dish_id,reward_dish_id,active").eq("restaurant_id", restaurantId).order("created_at"),
     ]);
-    const failure = categories.error || dishes.error || variants.error || groups.error || addons.error || links.error || offers.error;
-    if (failure) {
-      setError(messageOf(failure));
+    const failures = [
+      ["categories", categories.error],
+      ["dishes", dishes.error],
+      ["variants", variants.error],
+      ["add-on groups", groups.error],
+      ["add-ons", addons.error],
+      ["add-on links", links.error],
+      ["offers", offers.error],
+    ].filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[1] !== null);
+    if (failures.length) {
+      const [section, failure] = failures[0];
+      const detail = requestMessage(failure);
+      if (/column .*?(avail_from|avail_to)|(?:avail_from|avail_to).*column/i.test(detail)) {
+        setError(`Could not load ${section}: the serving-hours database migration is missing. Apply 20261102000001_dish_serving_windows.sql, then reload this page. (${detail})`);
+      } else if (/(?:column .* does not exist|could not find .* column|schema cache)/i.test(detail)) {
+        setError(`Could not load ${section}: the database schema is behind this app. Apply the latest Supabase migrations, then reload this page. (${detail})`);
+      } else {
+        setError(`Could not load ${section}: ${detail}`);
+      }
     } else {
       setData({
         categories: categories.data as Category[],
